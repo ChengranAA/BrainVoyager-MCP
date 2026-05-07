@@ -575,7 +575,7 @@ def check_for_mcp_requests():
         except:
             pass
 
-# 3. Hijack the BrainVoyager UI event loop
+# Hijack the BrainVoyager UI event loop
 # This tells BrainVoyager: "Every 100 milliseconds, run my check function"
 mcp_timer = QTimer()
 mcp_timer.timeout.connect(check_for_mcp_requests)

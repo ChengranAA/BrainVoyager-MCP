@@ -1,8 +1,10 @@
-# BV MCP — BrainVoyager MCP Bridge
+# Unofficial BrainVoyager MCP — BrainVoyager MCP Bridge
 
 A bridge that lets AI coding agents (like Claude, Zed, etc.) control
 [BrainVoyager](https://www.brainvoyager.com/) via the
 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+
+A very not smart implementation...
 
 ## What it does
 
@@ -42,5 +44,20 @@ BrainVoyager.**
 
 1. Start BrainVoyager.
 2. Open the Python plugin panel, paste `mcp_listener.py`, and run it.
-3. Config the MCP server in your favorite MCP client.
+3. Config the MCP server in your favorite MCP client. 
+```{json}
+{
+  /// Configure an MCP server that runs locally via stdin/stdout
+  ///
+  /// The name of your MCP server
+  "BrainVoyager": {
+    /// The command which runs the MCP server
+    "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp/bin/python",
+    /// The arguments to pass to the MCP server
+    "args": ["/Users/chengran/Documents/small_projects/bv_mcp/MCP/mcp_server.py"],
+    /// The environment variables to set
+    "env": {}
+  }
+}
+```
 4. Point your MCP client at the server. The agent can now control BV.
