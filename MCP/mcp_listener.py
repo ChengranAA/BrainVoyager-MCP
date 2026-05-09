@@ -11,10 +11,12 @@ except ImportError:
     except ImportError:
         from PySide6.QtCore import QTimer
 
+from mcp_helper import mp2rage_genUniDen
+
 HOST = '127.0.0.1'
 PORT = 5050
 
-# 1. Set up a non-blocking TCP socket
+# set up a non-blocking TCP socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind((HOST, PORT))
@@ -558,8 +560,46 @@ def check_for_mcp_requests():
                 response = "HTTP/1.1 400 Bad Request\n\nMissing mdm_file."
             client_socket.sendall(response.encode('utf-8'))
 
-        # --- Catch-all ---
 
+        # --- MP2RAGE Denoise ---
+        elif action == "mp2rage_denoise":
+            # Extract arguments from the parsed JSON data
+            chosen_factor = data.get("chosen_factor")
+            path_uni = data.get("path_uni")
+            path_inv1 = data.get("path_inv1")
+            path_inv2 = data.get("path_inv2")
+            uniden_filename = data.get("uniden_filename", "uniden.v16")
+            save_vmr = data.get("save_vmr", True)
+
+            bv.print_to_log(f"MCP instructed to run MP2RAGE denoise on: {path_uni}")
+
+            try:
+                # Call the mp2rage_genUniDen function we created earlier
+                output_path = mp2rage_genUniDen(
+                    chosen_factor=chosen_factor,
+                    path_UNI=path_uni,
+                    path_INV1=path_inv1,
+                    path_INV2=path_inv2,
+                    uniden_filename=uniden_filename,
+                    savevmr=save_vmr
+                )
+
+                if output_path:
+                    # Send back the successful path in the response body
+                    response = f"HTTP/1.1 200 OK\n\n{output_path}"
+                else:
+                    response = "HTTP/1.1 500 Internal Server Error\n\nFailed to return an output path."
+
+            except Exception as e:
+                bv.print_to_log(f"Error during MP2RAGE denoise: {str(e)}")
+                response = f"HTTP/1.1 400 Bad Request\n\nError processing MP2RAGE denoise: {str(e)}"
+
+            client_socket.sendall(response.encode('utf-8'))
+
+
+
+
+        # --- Catch-all ---
         else:
             response = "HTTP/1.1 400 Bad Request\n\nInvalid action or missing path."
             client_socket.sendall(response.encode('utf-8'))

@@ -1087,5 +1087,82 @@ def get_vtcs_of_mdm(mdm_file: str) -> str:
         return "Connection Error: Is the Qt listener running in BrainVoyager?"
 
 
+# ---------------------------------------------------------------------------
+# MP2RAGE DENOISE
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def run_mp2rage_denoise(
+    chosen_factor: float,
+    path_uni: str,
+    path_inv1: str,
+    path_inv2: str,
+    uniden_filename: str = "uniden.v16",
+    save_vmr: bool = True
+) -> str:
+    """
+    Runs background denoising on MP2RAGE MRI data.
+
+        MP2RAGE (Magnetization Prepared 2 Rapid Acquisition Gradient Echoes) is an MRI
+        sequence used to create highly uniform T1-weighted anatomical images, particularly
+        at high magnetic fields (like 3T or 7T). While it provides excellent tissue contrast,
+        the resulting 'UNI' image usually suffers from heavy 'salt-and-pepper' background noise.
+        This function uses mathematical operations to estimate and remove that noise.
+
+        Required Input Files:
+            - UNI (path_uni): The primary T1-weighted uniform image (contains the noise).
+            - INV1 (path_inv1): The image acquired at the first inversion time.
+            - INV2 (path_inv2): The image acquired at the second inversion time.
+
+        Args:
+            chosen_factor: Multiplying factor for noise level estimation (usually <= 10).
+            path_uni: Absolute path to the UNI .v16 file.
+            path_inv1: Absolute path to the INV1 .v16 file.
+            path_inv2: Absolute path to the INV2 .v16 file.
+            uniden_filename: Name of the output denoised file (default: 'uniden.v16').
+            save_vmr: Whether to also save a .vmr version of the output.
+
+        Returns:
+            Path to the created denoised file, or error message on failure.
+    """
+    # Expand user paths just in case '~' is used
+    expanded_uni = os.path.expanduser(path_uni)
+    expanded_inv1 = os.path.expanduser(path_inv1)
+    expanded_inv2 = os.path.expanduser(path_inv2)
+
+    # Pre-check if files exist before bothering the BrainVoyager listener
+    missing_files = [p for p in [expanded_uni, expanded_inv1, expanded_inv2] if not os.path.exists(p)]
+    if missing_files:
+        return f"Error: The following input files were not found: {', '.join(missing_files)}"
+
+    try:
+        response = requests.post(
+            BV_LISTENER_URL,
+            json={
+                "action": "mp2rage_denoise",
+                "chosen_factor": chosen_factor,
+                "path_uni": expanded_uni,
+                "path_inv1": expanded_inv1,
+                "path_inv2": expanded_inv2,
+                "uniden_filename": uniden_filename,
+                "save_vmr": save_vmr
+            },
+            timeout=300  # Denoising math might take a bit longer than a standard request
+        )
+
+        if response.status_code == 200:
+            # Assuming _parse_bv_result extracts the body of the 200 OK response
+            out_path = _parse_bv_result(response)
+            if out_path:
+                return f"Success: MP2RAGE denoised image created at '{out_path}'."
+            return "Warning: MP2RAGE denoise returned an empty path."
+
+        return f"Error from BrainVoyager: {response.text}"
+
+    except requests.exceptions.ConnectionError:
+        return "Connection Error: Is the Qt listener running in BrainVoyager?"
+
+
+
 if __name__ == "__main__":
     mcp.run()
