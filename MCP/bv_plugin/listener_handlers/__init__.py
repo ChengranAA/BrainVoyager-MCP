@@ -1,15 +1,21 @@
-"""Listener handler dispatch — merged hash table.
+"""Listener handler dispatch — merged hash table with explicit bv injection.
 
-Every handler module exports a ``HANDLERS`` dict mapping action-string →
-callable.  This init merges them into ``ALL_HANDLERS`` so the listener can
-do a single O(1) lookup with zero branching.
+``set_bv(bv_obj)`` must be called once before any handler fires.  It pushes
+the BrainVoyager object into every handler module so they don't rely on an
+implicit global.  This makes handlers testable outside BV.
 """
 
-from .core_handlers import HANDLERS as CORE
-from .anatomy_handlers import HANDLERS as ANATOMY
-from .fmri_handlers import HANDLERS as FMRI
+from . import core_handlers, anatomy_handlers, fmri_handlers
+
+
+def set_bv(bv_obj):
+    """Inject the BV scripting object into all handler modules."""
+    core_handlers._bv = bv_obj
+    anatomy_handlers._bv = bv_obj
+    fmri_handlers._bv = bv_obj
+
 
 ALL_HANDLERS: dict[str, callable] = {}
-ALL_HANDLERS.update(CORE)
-ALL_HANDLERS.update(ANATOMY)
-ALL_HANDLERS.update(FMRI)
+ALL_HANDLERS.update(core_handlers.HANDLERS)
+ALL_HANDLERS.update(anatomy_handlers.HANDLERS)
+ALL_HANDLERS.update(fmri_handlers.HANDLERS)

@@ -1,32 +1,28 @@
-"""fMRI action handlers — MDM / VTC / FMR / DMR / project (will grow).
+"""fMRI action handlers — MDM / VTC / FMR / DMR / project.
 
-Currently the smallest module.  Populate as FMR creation, VTC coregistration,
-temporal filtering, DMR, and project/workflow tools are added.
+``_bv`` is injected by ``listener_handlers.set_bv()`` at listener startup.
 """
 
 import json
+
+# Injected by set_bv() — do NOT use bare `bv` as an implicit global.
+_bv = None
 
 
 def _ok(body: str = "") -> str:
     return f"HTTP/1.1 200 OK\n\n{body}"
 
-
 def _bad(body: str) -> str:
     return f"HTTP/1.1 400 Bad Request\n\n{body}"
-
-
-# ── MDM / VTC ──────────────────────────────────────────────────────────────
 
 
 def _get_vtcs_of_mdm(data: dict) -> str:
     mdm = data.get("mdm_file", "")
     if not mdm:
         return _bad("Missing mdm_file.")
-    vtcs = bv.get_vtcs_of_mdm(mdm)
+    vtcs = _bv.get_vtcs_of_mdm(mdm)
     return _ok(json.dumps({"result": list(vtcs)}))
 
-
-# ── dispatch table ─────────────────────────────────────────────────────────
 
 HANDLERS: dict[str, callable] = {
     "get_vtcs_of_mdm": _get_vtcs_of_mdm,
