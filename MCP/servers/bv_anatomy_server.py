@@ -7,8 +7,9 @@ mcp = FastMCP(
     "BrainVoyager Anatomy",
     instructions=(
         "Most operations are fast (BV C++ core does the heavy lifting). "
-        "IIHC, MNI normalization, and MP2RAGE denoising on large datasets "
-        "may take longer. Long-running tools accept a timeout_seconds param."
+        "IIHC, MNI normalization, MP2RAGE denoising on large datasets, and "
+        "mesh morphing (inflate, shrink-wrap) may take minutes. "
+        "Long-running tools accept a timeout_seconds parameter."
     ),
 )
 
@@ -159,18 +160,137 @@ def set_bv_vmr_voxel_intensity(x: int, y: int, z: int, value: int) -> str:
                    x=x, y=y, z=z, value=value)
 
 
-# ── Mesh / 3D Viewer ──────────────────────────────────────────────────────
+# ── Mesh Scene ─────────────────────────────────────────────────────────────
 
 
 @mcp.tool()
-def create_bv_vmr_mesh_scene() -> str:
-    """Create/retrieve a MeshScene for the active VMR (enables 3D Viewer)."""
+def mesh_create_scene() -> str:
+    """Create/retrieve a MeshScene for the active VMR."""
     return call_bv("vmr_create_mesh_scene", timeout=10)
 
 
 @mcp.tool()
-def update_bv_vmr_viewer() -> str:
-    """Refresh the OpenGL 3D Viewer for the active VMR."""
+def mesh_load(mesh_file: str) -> str:
+    """Load a mesh (.srf) into the scene (replaces existing meshes)."""
+    return call_bv("mesh_load", timeout=30, mesh_file=mesh_file)
+
+
+@mcp.tool()
+def mesh_add(mesh_file: str) -> str:
+    """Add a mesh (.srf) to the scene without clearing existing ones."""
+    return call_bv("mesh_add", timeout=30, mesh_file=mesh_file)
+
+
+# ── Mesh Morphing ─────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def mesh_reconstruct() -> str:
+    """Reconstruct cortex mesh from segmented VMR (marching cubes).
+
+    The VMR must be segmented — blue brain tissue with yellow border."""
+    return call_bv("mesh_reconstruct", timeout=120)
+
+
+@mcp.tool()
+def mesh_smooth(n_cycles: int = 20, smooth_force: float = 0.5) -> str:
+    """Smooth mesh (advanced mode — no shrinkage).
+
+    Args:
+        n_cycles: Smoothing iterations (default 20).
+        smooth_force: Strength 0-1 (default 0.5)."""
+    return call_bv("mesh_smooth", timeout=120,
+                   n_cycles=n_cycles, smooth_force=smooth_force)
+
+
+@mcp.tool()
+def mesh_smooth_simple(n_cycles: int = 20, smooth_force: float = 0.5) -> str:
+    """Smooth mesh (basic mode — causes shrinkage).
+
+    Useful during inflation where shrinkage is expected.
+
+    Args:
+        n_cycles: Iterations (default 20).
+        smooth_force: Strength 0-1 (default 0.5)."""
+    return call_bv("mesh_smooth_simple", timeout=120,
+                   n_cycles=n_cycles, smooth_force=smooth_force)
+
+
+@mcp.tool()
+def mesh_inflate(n_cycles: int = 100, smooth_force: float = 0.8) -> str:
+    """Inflate mesh while preserving surface area (removes folds).
+
+    Args:
+        n_cycles: Inflation steps (default 100).
+        smooth_force: Strength 0-1 (default 0.8)."""
+    return call_bv("mesh_inflate", timeout=300,
+                   n_cycles=n_cycles, smooth_force=smooth_force)
+
+
+@mcp.tool()
+def mesh_inflate_to_sphere(n_cycles: int = 300) -> str:
+    """Inflate mesh all the way to a sphere.
+
+    Args:
+        n_cycles: Inflation steps (default 300)."""
+    return call_bv("mesh_inflate_to_sphere", timeout=600,
+                   n_cycles=n_cycles)
+
+
+@mcp.tool()
+def mesh_create_sphere(radius: int = 100, resol_level: int = 1) -> str:
+    """Create a sphere mesh for shrink-wrap morphing.
+
+    Args:
+        radius: Sphere radius (default 100).
+        resol_level: 1=standard, higher=more vertices."""
+    return call_bv("mesh_create_sphere", timeout=60,
+                   radius=radius, resol_level=resol_level)
+
+
+@mcp.tool()
+def mesh_shrink_wrap(n_cycles: int = 80, find_vmr_value: float = 120.0) -> str:
+    """Shrink-wrap a sphere mesh to the cortex surface.
+
+    Requires sphere mesh + segmented VMR.  Morph stops when tissue
+    values >= find_vmr_value are reached.
+
+    Args:
+        n_cycles: Morph steps (default 80).
+        find_vmr_value: Tissue intensity threshold (default 120)."""
+    return call_bv("mesh_shrink_wrap", timeout=300,
+                   n_cycles=n_cycles, find_vmr_value=find_vmr_value)
+
+
+@mcp.tool()
+def mesh_recreate_geometry() -> str:
+    """Sync visual display after manual geometry changes."""
+    return call_bv("mesh_recreate_geometry", timeout=10)
+
+
+# ── Mesh Save ─────────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def mesh_save() -> str:
+    """Save the current mesh to disk using its existing file name."""
+    return call_bv("mesh_save", timeout=10)
+
+
+@mcp.tool()
+def mesh_save_as(mesh_file: str, remove_current: bool = False) -> str:
+    """Save the current mesh with a new file name.
+
+    Args:
+        mesh_file: Output .srf file path.
+        remove_current: Delete the old file from disk."""
+    return call_bv("mesh_save_as", timeout=10,
+                   mesh_file=mesh_file, remove_current=remove_current)
+
+
+@mcp.tool()
+def mesh_update_viewer() -> str:
+    """Refresh the OpenGL 3D Viewer."""
     return call_bv("vmr_update_viewer", timeout=10)
 
 

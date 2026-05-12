@@ -54,6 +54,59 @@ def describe_bv_method(method_name: str) -> str:
     return call_bv("describe_method", timeout=5, method_name=method_name)
 
 
+# ── Document List ─────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def list_open_documents() -> str:
+    """Return a list of all open documents in BrainVoyager (index + name)."""
+    return call_bv("list_docs", timeout=10)
+
+
+@mcp.tool()
+def count_open_documents() -> str:
+    """Return the number of documents currently open in BV."""
+    return call_bv("count_docs", timeout=5)
+
+
+@mcp.tool()
+def get_document_by_index(index: int) -> str:
+    """Get the document at a specific position in the workspace list.
+
+    Args:
+        index: 0-based position in the document list."""
+    return call_bv("get_doc_by_index", timeout=10, index=index)
+
+
+@mcp.tool()
+def save_active_document() -> str:
+    """Save the active document to disk using its current file name."""
+    return call_bv("save_doc", timeout=10)
+
+
+@mcp.tool()
+def save_active_document_as(file_name: str) -> str:
+    """Save the active document to disk with a new file name.
+
+    Args:
+        file_name: Full path or relative file name for the saved file."""
+    return call_bv("save_doc_as", timeout=10, file_name=file_name)
+
+
+@mcp.tool()
+def close_active_document() -> str:
+    """Close the active document (frees memory, removes from workspace)."""
+    return call_bv("close_doc", timeout=5)
+
+
+@mcp.tool()
+def remove_active_document() -> str:
+    """Delete the active document from disk AND close it.
+
+    Use with caution — the file is permanently deleted."""
+    return call_bv("remove_doc", timeout=5)
+
+
 # ── DICOM Operations ──────────────────────────────────────────────────────
 
 

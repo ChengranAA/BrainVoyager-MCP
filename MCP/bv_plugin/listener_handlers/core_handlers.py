@@ -64,6 +64,63 @@ def _get_doc_attributes(_data: dict) -> str:
     return _ok(json.dumps({"result": info}))
 
 
+# ── document list ──────────────────────────────────────────────────────────
+
+def _list_docs(_data: dict) -> str:
+    docs = _bv.docs
+    n = docs.size()
+    if n == 0:
+        return _ok("No documents open.")
+    lines = [f"{n} document(s) open:"]
+    for i in range(n):
+        doc = docs.item(i)
+        lines.append(f"  [{i}] {doc.file_name}  ({doc.path_file_name})")
+    return _ok("\n".join(lines))
+
+def _count_docs(_data: dict) -> str:
+    return _ok(str(_bv.docs.size()))
+
+def _get_doc_by_index(data: dict) -> str:
+    idx = data.get("index", 0)
+    docs = _bv.docs
+    if idx < 0 or idx >= docs.size():
+        return _bad(f"Index {idx} out of range (0-{docs.size() - 1}).")
+    doc = docs.item(idx)
+    info = (f"[{idx}] {doc.file_name}  "
+            f"{doc.dim_x}x{doc.dim_y}x{doc.dim_z}  "
+            f"Path: {doc.path_file_name}")
+    return _ok(json.dumps({"result": info}))
+
+def _save_doc(_data: dict) -> str:
+    doc = _bv.active_document
+    if doc is None:
+        return _bad("No active document.")
+    return _ok(json.dumps({"result": doc.save()}))
+
+def _save_doc_as(data: dict) -> str:
+    doc = _bv.active_document
+    if doc is None:
+        return _bad("No active document.")
+    f = data.get("file_name", "")
+    if not f:
+        return _bad("Missing file_name.")
+    return _ok(json.dumps({"result": doc.save_as(f)}))
+
+def _close_doc(_data: dict) -> str:
+    doc = _bv.active_document
+    if doc is None:
+        return _bad("No active document.")
+    doc.close()
+    return _ok("Document closed.")
+
+def _remove_doc(_data: dict) -> str:
+    doc = _bv.active_document
+    if doc is None:
+        return _bad("No active document.")
+    doc.remove()
+    return _ok("Document removed from disk and closed.")
+
+
 # ── DICOM ──────────────────────────────────────────────────────────────────
 
 def _rename_dicoms(data: dict) -> str:
@@ -167,6 +224,13 @@ HANDLERS: dict[str, callable] = {
     "open_document":             _open_document,
     "open":                      _open_advanced,
     "get_doc_attributes":        _get_doc_attributes,
+    "list_docs":                 _list_docs,
+    "count_docs":                _count_docs,
+    "get_doc_by_index":          _get_doc_by_index,
+    "save_doc":                  _save_doc,
+    "save_doc_as":               _save_doc_as,
+    "close_doc":                 _close_doc,
+    "remove_doc":                _remove_doc,
     "rename_dicoms":             _rename_dicoms,
     "anonymize_dicoms":          _anonymize_dicoms,
     "deface_anat_dicoms":        _deface_anat_dicoms,
