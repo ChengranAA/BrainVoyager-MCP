@@ -1,4 +1,5 @@
 """BV fMRI MCP Server — FMR creation, preprocessing, VTC, MDM, DMR & project."""
+import sys; from pathlib import Path; sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from mcp.server.fastmcp import FastMCP
 from MCP._shared.bv_client import call_bv, call_bv_with_path
 

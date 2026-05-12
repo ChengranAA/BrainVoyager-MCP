@@ -39,9 +39,9 @@ AI's context window lean.
 
 | Server | Tools | What it does |
 |---|---|---|
-| `bv_core_server` | 20 | Document open/close, DICOM rename/anonymize/deface, log, shell, window |
-| `bv_anatomy_server` | 17 | VMR creation, IIHC, MNI normalization, Talairach, defacing, isovoxel, mesh, MP2RAGE |
-| `bv_fmri_server` | 1+ | VTC/MDM (growing: FMR, DMR, project workflows) |
+| `bv_core_server` | 27 | Doc open/close/save/list, DICOM ops, log, shell, window |
+| `bv_anatomy_server` | 31 | VMR pipeline, MNI/Tal, mesh morphing (reconstruct, smooth, inflate, shrink-wrap), MP2RAGE |
+| `bv_fmri_server` | 22 | FMR preprocessing, VTC coregistration/creation (native/MNI/Tal), filtering, MDM |
 
 ## Directory Structure
 
@@ -82,26 +82,47 @@ BV's UI stays responsive thanks to a non-blocking socket polled by QTimer.
 
 ### 2. MCP Client Config
 
+Uses `uv run` to pick up the project's Python environment automatically:
+
 ```json
 {
   "mcpServers": {
     "BrainVoyager Core": {
-      "command": "python",
-      "args": ["/path/to/bv_mcp/MCP/servers/bv_core_server.py"]
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/bv_mcp",
+        "python",
+        "MCP/servers/bv_core_server.py"
+      ]
     },
     "BrainVoyager Anatomy": {
-      "command": "python",
-      "args": ["/path/to/bv_mcp/MCP/servers/bv_anatomy_server.py"]
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/bv_mcp",
+        "python",
+        "MCP/servers/bv_anatomy_server.py"
+      ]
     },
     "BrainVoyager fMRI": {
-      "command": "python",
-      "args": ["/path/to/bv_mcp/MCP/servers/bv_fmri_server.py"]
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/bv_mcp",
+        "python",
+        "MCP/servers/bv_fmri_server.py"
+      ]
     }
   }
 }
 ```
 
-Enable only the servers you need. Disable the rest to keep context small.
+Replace `/path/to/bv_mcp` with the actual path to this project.  Enable only
+the servers you need — disable the rest to keep the AI's context small.
 
 ### 3. Verify
 
@@ -114,7 +135,7 @@ Ask your AI agent: *"List the BrainVoyager methods available."*
 1. Add a handler in `bv_plugin/listener_handlers/<domain>_handlers.py`:
    ```python
    def _vmr_new_command(data: dict) -> str:
-       vmr = bv.active_document
+       vmr = _bv.active_document
        result = vmr.new_command(data.get("param", "default"))
        return _ok(json.dumps({"result": result}))
    ```
@@ -125,7 +146,7 @@ Ask your AI agent: *"List the BrainVoyager methods available."*
        "vmr_new_command": _vmr_new_command,  # ← one line
    }
    ```
-3. Add the MCP tool in `servers/bv_anatomy_server.py`:
+3. Add the MCP tool in `servers/<domain>_server.py`:
    ```python
    @mcp.tool()
    def new_vmr_command(param: str = "default") -> str:

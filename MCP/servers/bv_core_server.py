@@ -1,4 +1,5 @@
 """BV Core MCP Server — document management, DICOM ops, UI & shell."""
+import sys; from pathlib import Path; sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import os
 from mcp.server.fastmcp import FastMCP
 from MCP._shared.bv_client import call_bv, call_bv_with_path
