@@ -5,9 +5,9 @@ from MCP._shared.bv_client import call_bv, call_bv_with_path
 mcp = FastMCP(
     "BrainVoyager fMRI",
     instructions=(
-        "Most operations are fast. Motion correction, spatial/temporal "
-        "smoothing, and high-pass filtering on large datasets may take longer. "
-        "Long-running tools accept a timeout_seconds parameter."
+        "Most operations are fast. VTC creation, coregistration, and "
+        "smoothing on large datasets may take minutes. Long-running tools "
+        "accept a timeout_seconds parameter."
     ),
 )
 
@@ -22,7 +22,7 @@ def create_fmr_from_bv_dicom(
     file_of_series: str, fmr_stc_filename: str, target_folder: str,
     protocol_file: str = "",
 ) -> str:
-    """Create a FMR document from a DICOM functional series.
+    """Create an FMR document from a DICOM functional series.
 
     Only needs one file of the series; all parameters are read from the
     DICOM header.  Supports single-image, Siemens mosaic, and multi-frame
@@ -49,8 +49,8 @@ def create_fmr_nifti_bids_from_bv_dicom(
 
     Args:
         file_of_series: Path to one DICOM of the functional series.
-        subj_id: Subject number (e.g. 7 → "sub-07").
-        ses_id: Session number (e.g. 1 → "ses-01").
+        subj_id: Subject number (e.g. 7 -> "sub-07").
+        ses_id: Session number (e.g. 1 -> "ses-01").
         run_id: Run number.
         task_name: BIDS task label (e.g. "rest", "facerecognition").
         project_folder: BIDS project root folder path.
@@ -72,12 +72,10 @@ def create_fmr_nifti_bids_from_bv_dicom(
 
 @mcp.tool()
 def fmr_correct_motion(timeout_seconds: int = 120) -> str:
-    """3D rigid-body motion correction on the active FMR document.
+    """3D rigid-body motion correction on the active FMR.
 
-    Aligns all volumes to the first volume. Uses trilinear-sinc
-    interpolation by default.  The STC data is modified in-place.
-
-    Usually fast (seconds).  Increase timeout_seconds for long runs."""
+    Aligns all volumes to the first volume using trilinear-sinc
+    interpolation.  The STC data is modified in-place."""
     return call_bv("fmr_correct_motion", timeout=timeout_seconds)
 
 
@@ -88,8 +86,7 @@ def fmr_correct_motion_to_vol(
     """3D motion correction aligning to a specific target volume.
 
     Args:
-        target_vol_idx: 0-based index of the volume to align to.
-        timeout_seconds: Max seconds to wait."""
+        target_vol_idx: 0-based index of the volume to align to."""
     return call_bv("fmr_correct_motion_to_vol", timeout=timeout_seconds,
                    target_vol_idx=target_vol_idx)
 
@@ -98,15 +95,13 @@ def fmr_correct_motion_to_vol(
 def fmr_correct_slice_timing(
     interpolation_method: int = 1, timeout_seconds: int = 120,
 ) -> str:
-    """Slice timing correction on the active FMR document.
+    """Slice timing correction on the active FMR.
 
-    Uses the timing table embedded in the DICOM header — handles single
-    and multi-band data automatically.  Resamples each slice's time course
-    to a common reference time point.
+    Uses the timing table from the DICOM header — handles single and
+    multi-band data automatically.
 
     Args:
-        interpolation_method: 1=trilinear, 2=cubic spline, 3=sinc.
-        timeout_seconds: Max seconds to wait."""
+        interpolation_method: 1=trilinear, 2=cubic spline, 3=sinc."""
     return call_bv("fmr_correct_slicetiming", timeout=timeout_seconds,
                    interpolation_method=interpolation_method)
 
@@ -116,12 +111,11 @@ def fmr_smooth_spatial(
     gauss_fwhm: float = 4.0, fwhm_unit: str = "mm",
     timeout_seconds: int = 120,
 ) -> str:
-    """3D Gaussian spatial smoothing on the active FMR document.
+    """3D Gaussian spatial smoothing on the active FMR.
 
     Args:
         gauss_fwhm: Full width at half maximum (default 4.0).
-        fwhm_unit: "mm" (millimeters) or "voxel".
-        timeout_seconds: Max seconds to wait."""
+        fwhm_unit: "mm" or "voxel"."""
     return call_bv("fmr_smooth_spatial", timeout=timeout_seconds,
                    gauss_fwhm=gauss_fwhm, fwhm_unit=fwhm_unit)
 
@@ -131,12 +125,11 @@ def fmr_smooth_temporal(
     gauss_fwhm: float = 2.0, fwhm_unit: str = "data_points",
     timeout_seconds: int = 120,
 ) -> str:
-    """Gaussian temporal smoothing on the active FMR document.
+    """Gaussian temporal smoothing on the active FMR.
 
     Args:
-        gauss_fwhm: Full width at half maximum in data points (default 2).
-        fwhm_unit: "data_points" or "ms".
-        timeout_seconds: Max seconds to wait."""
+        gauss_fwhm: FWHM in data points (default 2).
+        fwhm_unit: "data_points" or "ms"."""
     return call_bv("fmr_smooth_temporal", timeout=timeout_seconds,
                    gauss_fwhm=gauss_fwhm, fwhm_unit=fwhm_unit)
 
@@ -145,11 +138,10 @@ def fmr_smooth_temporal(
 def fmr_filter_highpass_glm_fourier(
     n_cycles: int = 3, timeout_seconds: int = 120,
 ) -> str:
-    """Remove low-frequency drifts using a GLM with sine/cosine regressors.
+    """Remove low-frequency drift from FMR (sine/cosine GLM).
 
     Args:
-        n_cycles: Number of sine/cosine cycles to remove (default 3).
-        timeout_seconds: Max seconds to wait."""
+        n_cycles: Number of cycles to remove (default 3)."""
     return call_bv("fmr_filter_highpass_fourier", timeout=timeout_seconds,
                    n_cycles=n_cycles)
 
@@ -158,17 +150,237 @@ def fmr_filter_highpass_glm_fourier(
 def fmr_filter_highpass_glm_dct(
     n_basis_functions: int = 2, timeout_seconds: int = 120,
 ) -> str:
-    """Remove low-frequency drifts using a GLM with DCT basis functions.
+    """Remove low-frequency drift from FMR (DCT GLM).
 
     Args:
-        n_basis_functions: Number of DCT bases to remove (default 2).
-        timeout_seconds: Max seconds to wait."""
+        n_basis_functions: Number of DCT bases to remove (default 2)."""
     return call_bv("fmr_filter_highpass_dct", timeout=timeout_seconds,
                    n_basis_functions=n_basis_functions)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# MDM / VTC
+# VTC — Coregistration & VTC Creation
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool()
+def vtc_link(vtc_file: str) -> str:
+    """Link a .vtc file to the active VMR document."""
+    return call_bv("vtc_link", timeout=10, vtc_file=vtc_file)
+
+
+@mcp.tool()
+def vtc_save(vtc_file: str) -> str:
+    """Save VTC data from the active VMR to disk."""
+    return call_bv("vtc_save", timeout=30, vtc_file=vtc_file)
+
+
+@mcp.tool()
+def vtc_coregister_fmr_to_vmr(
+    fmr_file: str, iihc_func: bool = False, use_attached_amr: int = 0,
+    timeout_seconds: int = 300,
+) -> str:
+    """Coregister an FMR to the active VMR (intensity-gradient matching).
+
+    Uses DICOM header alignment + iterative intensity matching.
+    Produces IA and FA .trf transformation files.
+
+    Args:
+        fmr_file: Path to the FMR file to coregister.
+        iihc_func: Run IIHC on the first functional volume first.
+        use_attached_amr: 0=first vol as reference, 1=attached AMR.
+        timeout_seconds: Max seconds to wait (default 300)."""
+    return call_bv("vtc_coregister_fmr", timeout=timeout_seconds,
+                   fmr_file=fmr_file, iihc_func=iihc_func,
+                   use_attached_amr=use_attached_amr)
+
+
+@mcp.tool()
+def vtc_coregister_fmr_to_vmr_bbr(
+    fmr_file: str, timeout_seconds: int = 300,
+) -> str:
+    """Coregister an FMR to the active VMR (boundary-based registration).
+
+    More accurate than intensity-based for some contrasts, but slower.
+
+    Args:
+        fmr_file: Path to the FMR file to coregister.
+        timeout_seconds: Max seconds to wait (default 300)."""
+    return call_bv("vtc_coregister_fmr_bbr", timeout=timeout_seconds,
+                   fmr_file=fmr_file)
+
+
+@mcp.tool()
+def vtc_create_in_native_space(
+    fmr_file: str, coreg_ia_trf_file: str, coreg_fa_trf_file: str,
+    vtc_file: str, res_to_anat: int = 1, interpolation_method: int = 1,
+    bounding_box_intensity_threshold: int = 100, data_type: int = 2,
+    timeout_seconds: int = 300,
+) -> str:
+    """Transform FMR-STC into native VMR space, creating a .vtc file.
+
+    Args:
+        fmr_file: Path to the preprocessed FMR file.
+        coreg_ia_trf_file: IA coregistration .trf file.
+        coreg_fa_trf_file: FA coregistration .trf file.
+        vtc_file: Output .vtc filename.
+        res_to_anat: Resolution relative to VMR (1=same, 2=double).
+        interpolation_method: 1=trilinear, 2=cubic, 3=sinc.
+        bounding_box_intensity_threshold: VMR intensity for bounding box.
+        data_type: 1=uint8, 2=uint16, 3=float32.
+        timeout_seconds: Max seconds to wait."""
+    return call_bv("vtc_create_native", timeout=timeout_seconds,
+                   fmr_file=fmr_file, coreg_ia_trf_file=coreg_ia_trf_file,
+                   coreg_fa_trf_file=coreg_fa_trf_file, vtc_file=vtc_file,
+                   res_to_anat=res_to_anat,
+                   interpolation_method=interpolation_method,
+                   bounding_box_intensity_threshold=bounding_box_intensity_threshold,
+                   data_type=data_type)
+
+
+@mcp.tool()
+def vtc_create_in_mni_space(
+    fmr_file: str, coreg_ia_trf_file: str, coreg_fa_trf_file: str,
+    mni_trf_file: str, vtc_file: str, res_to_anat: int = 1,
+    interpolation_method: int = 1,
+    bounding_box_intensity_threshold: int = 100, data_type: int = 2,
+    timeout_seconds: int = 300,
+) -> str:
+    """Transform FMR-STC into MNI space, creating a .vtc file.
+
+    Args:
+        fmr_file: Path to the preprocessed FMR file.
+        coreg_ia_trf_file: IA .trf file.
+        coreg_fa_trf_file: FA .trf file.
+        mni_trf_file: MNI normalization .trf file.
+        vtc_file: Output .vtc filename.
+        res_to_anat: Resolution (1, 2, 3).
+        interpolation_method: 1=trilinear, 2=cubic, 3=sinc.
+        bounding_box_intensity_threshold: Intensity threshold.
+        data_type: 1=uint8, 2=uint16, 3=float32.
+        timeout_seconds: Max seconds to wait."""
+    return call_bv("vtc_create_mni", timeout=timeout_seconds,
+                   fmr_file=fmr_file, coreg_ia_trf_file=coreg_ia_trf_file,
+                   coreg_fa_trf_file=coreg_fa_trf_file,
+                   mni_trf_file=mni_trf_file, vtc_file=vtc_file,
+                   res_to_anat=res_to_anat,
+                   interpolation_method=interpolation_method,
+                   bounding_box_intensity_threshold=bounding_box_intensity_threshold,
+                   data_type=data_type)
+
+
+@mcp.tool()
+def vtc_create_in_tal_space(
+    fmr_file: str, coreg_ia_trf_file: str, coreg_fa_trf_file: str,
+    acpc_trf_file: str, tal_file: str, vtc_file: str,
+    res_to_anat: int = 1, interpolation_method: int = 1,
+    bounding_box_intensity_threshold: int = 100, data_type: int = 2,
+    timeout_seconds: int = 300,
+) -> str:
+    """Transform FMR-STC into Talairach space, creating a .vtc file.
+
+    Args:
+        fmr_file: Path to the preprocessed FMR file.
+        coreg_ia_trf_file: IA .trf file.
+        coreg_fa_trf_file: FA .trf file.
+        acpc_trf_file: AC-PC .trf file.
+        tal_file: Talairach .tal file.
+        vtc_file: Output .vtc filename.
+        res_to_anat: Resolution (1, 2, 3).
+        interpolation_method: 1=trilinear, 2=cubic, 3=sinc.
+        bounding_box_intensity_threshold: Intensity threshold.
+        data_type: 1=uint8, 2=uint16, 3=float32.
+        timeout_seconds: Max seconds to wait."""
+    return call_bv("vtc_create_tal", timeout=timeout_seconds,
+                   fmr_file=fmr_file, coreg_ia_trf_file=coreg_ia_trf_file,
+                   coreg_fa_trf_file=coreg_fa_trf_file,
+                   acpc_trf_file=acpc_trf_file, tal_file=tal_file,
+                   vtc_file=vtc_file, res_to_anat=res_to_anat,
+                   interpolation_method=interpolation_method,
+                   bounding_box_intensity_threshold=bounding_box_intensity_threshold,
+                   data_type=data_type)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# VTC Preprocessing (smoothing / filtering on linked VTC)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@mcp.tool()
+def vtc_smooth_spatial(
+    gauss_fwhm: float = 4.0, fwhm_unit: str = "mm",
+    timeout_seconds: int = 120,
+) -> str:
+    """3D Gaussian spatial smoothing on the VTC attached to active VMR.
+
+    Args:
+        gauss_fwhm: Full width at half maximum (default 4.0).
+        fwhm_unit: "mm" or "voxel".
+        timeout_seconds: Max seconds to wait."""
+    return call_bv("vtc_smooth_spatial", timeout=timeout_seconds,
+                   gauss_fwhm=gauss_fwhm, fwhm_unit=fwhm_unit)
+
+
+@mcp.tool()
+def vtc_smooth_temporal(
+    gauss_fwhm: float = 2.0, fwhm_unit: str = "data_points",
+    timeout_seconds: int = 120,
+) -> str:
+    """Gaussian temporal smoothing on the VTC attached to active VMR.
+
+    Args:
+        gauss_fwhm: FWHM in data points (default 2).
+        fwhm_unit: "data_points" or "ms".
+        timeout_seconds: Max seconds to wait."""
+    return call_bv("vtc_smooth_temporal", timeout=timeout_seconds,
+                   gauss_fwhm=gauss_fwhm, fwhm_unit=fwhm_unit)
+
+
+@mcp.tool()
+def vtc_filter_highpass_glm_fourier(
+    n_cycles: int = 3, timeout_seconds: int = 120,
+) -> str:
+    """Remove low-frequency drift from VTC (sine/cosine GLM).
+
+    Args:
+        n_cycles: Number of cycles to remove (default 3).
+        timeout_seconds: Max seconds to wait."""
+    return call_bv("vtc_filter_highpass_fourier",
+                   timeout=timeout_seconds, n_cycles=n_cycles)
+
+
+@mcp.tool()
+def vtc_filter_highpass_glm_dct(
+    n_basis_functions: int = 2, timeout_seconds: int = 120,
+) -> str:
+    """Remove low-frequency drift from VTC (DCT GLM).
+
+    Args:
+        n_basis_functions: Number of DCT bases to remove (default 2).
+        timeout_seconds: Max seconds to wait."""
+    return call_bv("vtc_filter_highpass_dct",
+                   timeout=timeout_seconds, n_basis_functions=n_basis_functions)
+
+
+@mcp.tool()
+def vtc_filter_highpass_fft(
+    highpass: float = 0.008, highpass_unit: str = "Hz",
+    timeout_seconds: int = 120,
+) -> str:
+    """Remove low-frequency drift from VTC using FFT.
+
+    Removes linear trend, FFT-transforms, zeroes low frequencies, IFFT.
+
+    Args:
+        highpass: Frequency cut-off (default 0.008 Hz ~ 125 s).
+        highpass_unit: "Hz" or "s" (period in seconds).
+        timeout_seconds: Max seconds to wait."""
+    return call_bv("vtc_filter_highpass_fft", timeout=timeout_seconds,
+                   highpass=highpass, highpass_unit=highpass_unit)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MDM
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -179,16 +391,8 @@ def get_vtcs_of_mdm(mdm_file: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TODO — populate as needed
+# TODO — DMR, Mesh, Project
 # ═══════════════════════════════════════════════════════════════════════════
-#
-#   VTC:  link_vtc, save_vtc, create_vtc_in_native_space,
-#         coregister_fmr_to_vmr, coregister_fmr_to_vmr_using_bbr
-#   DMR:  create_dmr_dicom, create_dmr_dicom_nifti_bids, create_dmr
-#   Mesh: reconstruct_mesh, smooth_geometry, inflate_geometry,
-#         inflate_geometry_to_sphere, shrink_wrap_morph, create_sphere_mesh
-#   Proj: create_project, subject_data, group_data, workflow.run, connect
-#
 
 
 if __name__ == "__main__":
