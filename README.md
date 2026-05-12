@@ -1,63 +1,136 @@
-# Unofficial BrainVoyager MCP — BrainVoyager MCP Bridge
+# Unofficial BrainVoyager MCP — AI-controlled BrainVoyager Bridge
 
-A bridge that lets AI coding agents (like Claude, Zed, etc.) control
-[BrainVoyager](https://www.brainvoyager.com/) via the
+Control [BrainVoyager](https://www.brainvoyager.com/) from AI coding agents (Claude,
+Zed, Cursor, etc.) via the
 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
-A very not smart implementation...
+## Architecture
 
-## What it does
+```
+┌──────────────────────┐    HTTP POST     ┌──────────────────────────────┐
+│  AI Agent (Claude)   │ ──────────────→  │  bv_core_server.py           │
+│                      │                  │  bv_anatomy_server.py         │
+│  MCP Client config:  │                  │  bv_fmri_server.py            │
+│    - BV Core         │                  │                              │
+│    - BV Anatomy      │                  │  Each is a FastMCP instance  │
+│    - BV fMRI         │                  │  calling _shared/bv_client   │
+└──────────────────────┘                  └──────────┬───────────────────┘
+                                                     │ TCP :5050
+                                                     ▼
+┌──────────────────────────────────────────────────────────────┐
+│  BrainVoyager (Qt event loop)                                │
+│                                                              │
+│  bv_plugin/mcp_listener.py  ← non-blocking TCP + QTimer      │
+│       │                                                      │
+│       │  ALL_HANDLERS["action"](data)   ← O(1) hash table    │
+│       ▼                                                      │
+│  bv_plugin/listener_handlers/                                │
+│       ├── core_handlers.py    →  bv.open_document(), etc.     │
+│       ├── anatomy_handlers.py →  vmr.deface(), etc.          │
+│       └── fmri_handlers.py    →  bv.get_vtcs_of_mdm(), etc.   │
+│                                                              │
+│  bv_auto_load/mcp_helper.py  →  MP2RAGE denoising, utilities │
+└──────────────────────────────────────────────────────────────┘
+```
 
-This project exposes BrainVoyager's automation API as MCP tools, so an AI agent can
-directly drive BV workflows: load/create anatomical/functional datasets, run
-preprocessing pipelines (inhomogeneity correction, iso-voxel resampling, MNI
-normalization, defacing, Talairach transformation), manage DICOM files, and query
-document attributes — all through natural language instructions.
+**Three small servers instead of one monolith.** This follows the MCP ecosystem
+standard — the user enables only the servers they need per session, keeping the
+AI's context window lean.
 
-Two components work together:
+| Server | Tools | What it does |
+|---|---|---|
+| `bv_core_server` | 20 | Document open/close, DICOM rename/anonymize/deface, log, shell, window |
+| `bv_anatomy_server` | 17 | VMR creation, IIHC, MNI normalization, Talairach, defacing, isovoxel, mesh, MP2RAGE |
+| `bv_fmri_server` | 1+ | VTC/MDM (growing: FMR, DMR, project workflows) |
 
-- **`mcp_server.py`** — the MCP server (FastMCP). This is what the AI agent talks to.
-  Each BV API call is wrapped as an `@mcp.tool()`, and the server forwards requests
-  to the listener running inside BrainVoyager.
-- **`mcp_listener.py`** — a TCP listener that runs *inside* BrainVoyager's Python
-  plugin environment. It receives commands on `127.0.0.1:5050` and executes them
-  against the live BV instance.
+## Directory Structure
 
-## The trick: getting BrainVoyager to spawn a server
+```
+MCP/
+├── _shared/
+│   └── bv_client.py            # call_bv() — shared by all 3 MCP servers
+│
+├── servers/                    # MCP server entry points (run OUTSIDE BV)
+│   ├── bv_core_server.py
+│   ├── bv_anatomy_server.py
+│   └── bv_fmri_server.py
+│
+├── bv_plugin/                  # → Copy into BV's plugin directory
+│   ├── mcp_listener.py         # Run this from BV's Python Plugin editor
+│   └── listener_handlers/      # Hash-table dispatch (no if/elif chains)
+│       ├── core_handlers.py
+│       ├── anatomy_handlers.py
+│       └── fmri_handlers.py
+│
+└── bv_auto_load/               # → Copy into BV's auto-load directory
+    └── mcp_helper.py           # MP2RAGE denoising, VMR utilities
+```
 
-BrainVoyager has a built-in Python plugin system, but you can't start a long-running
-server process from within it — BV's main thread would block and the UI would freeze.
+## Quick Start
 
-The workaround is to use **Qt's event loop**:
+### 1. Inside BrainVoyager
 
-1. Create a **non-blocking** TCP socket (call `setblocking(False)` on the socket).
-2. Use `QTimer` (from PyQt5, PySide2, or PySide6 — BV ships with one of them) to
-   poll that socket on a recurring interval (e.g. every 100 ms).
-3. Paste the entire `mcp_listener.py` script into BV's **Python plugin editor** and
-   run it. The timer-driven polling integrates cleanly with Qt's event loop, so BV
-   stays responsive while continuously listening for commands.
+Copy the `bv_auto_load/` and `bv_plugin/` folders into BrainVoyager's plugin
+directory. Then open BV's **Python Plugin** panel, open `mcp_listener.py`, and
+run it. You should see:
 
-In short: **non-blocking socket + QTimer = a server that doesn't freeze
-BrainVoyager.**
+```
+SUCCESS: Real-time listener active on 127.0.0.1:5050
+```
 
-## Quick start
+BV's UI stays responsive thanks to a non-blocking socket polled by QTimer.
 
-1. Start BrainVoyager.
-2. Open the Python plugin panel, paste `mcp_listener.py`, and run it.
-3. Config the MCP server in your favorite MCP client. 
-```{json}
+### 2. MCP Client Config
+
+```json
 {
-  /// Configure an MCP server that runs locally via stdin/stdout
-  ///
-  /// The name of your MCP server
-  "BrainVoyager": {
-    /// The command which runs the MCP server
-    "command": "/opt/homebrew/Caskroom/miniconda/base/envs/mcp/bin/python",
-    /// The arguments to pass to the MCP server
-    "args": ["/Users/chengran/Documents/small_projects/bv_mcp/MCP/mcp_server.py"],
-    /// The environment variables to set
-    "env": {}
+  "mcpServers": {
+    "BrainVoyager Core": {
+      "command": "python",
+      "args": ["/path/to/bv_mcp/MCP/servers/bv_core_server.py"]
+    },
+    "BrainVoyager Anatomy": {
+      "command": "python",
+      "args": ["/path/to/bv_mcp/MCP/servers/bv_anatomy_server.py"]
+    },
+    "BrainVoyager fMRI": {
+      "command": "python",
+      "args": ["/path/to/bv_mcp/MCP/servers/bv_fmri_server.py"]
+    }
   }
 }
 ```
-4. Point your MCP client at the server. The agent can now control BV.
+
+Enable only the servers you need. Disable the rest to keep context small.
+
+### 3. Verify
+
+Ask your AI agent: *"List the BrainVoyager methods available."*
+
+---
+
+## Adding a New BV API Command
+
+1. Add a handler in `bv_plugin/listener_handlers/<domain>_handlers.py`:
+   ```python
+   def _vmr_new_command(data: dict) -> str:
+       vmr = bv.active_document
+       result = vmr.new_command(data.get("param", "default"))
+       return _ok(json.dumps({"result": result}))
+   ```
+2. Register it in the `HANDLERS` dict at the bottom of the same file:
+   ```python
+   HANDLERS = {
+       # ...
+       "vmr_new_command": _vmr_new_command,  # ← one line
+   }
+   ```
+3. Add the MCP tool in `servers/bv_anatomy_server.py`:
+   ```python
+   @mcp.tool()
+   def new_vmr_command(param: str = "default") -> str:
+       """Docstring..."""
+       return call_bv("vmr_new_command", timeout=30, param=param)
+   ```
+
+No changes needed in `mcp_listener.py`. The dispatch table picks it up automatically.
