@@ -60,6 +60,33 @@ def _create_fmr_dicom_nifti_bids(data: dict) -> str:
     path = _bv.create_fmr_dicom_nifti_bids(f, subj, ses, run, task, proj, pf)
     return _ok(json.dumps({"result": path}))
 
+def _create_mosaic_fmr(data: dict) -> str:
+    first = data.get("first_file", "")
+    if not first:
+        return _bad("Missing first_file.")
+    doc = _bv.create_mosaic_fmr(
+        first, data.get("n_volumes", 0), data.get("skip_n_volumes", 0),
+        data.get("first_volume_amr", False), data.get("n_slices", 0),
+        data.get("fmr_stc_filename", ""), data.get("big_endian", False),
+        data.get("mosaic_rows", 0), data.get("mosaic_cols", 0),
+        data.get("slice_rows", 0), data.get("slice_cols", 0),
+        data.get("bytes_per_pixel", 2), data.get("target_folder", ""))
+    return _ok("Mosaic FMR created.") if doc else _bad("Failed.")
+
+def _create_fmr(data: dict) -> str:
+    first = data.get("first_file", "")
+    if not first:
+        return _bad("Missing first_file.")
+    doc = _bv.create_fmr(
+        data.get("scanner_file_type", "DICOM"), first,
+        data.get("n_volumes", 0), data.get("skip_n_volumes", 0),
+        data.get("first_volume_amr", False), data.get("n_slices", 0),
+        data.get("fmr_stc_filename", ""), data.get("big_endian", False),
+        data.get("slice_rows", 0), data.get("slice_cols", 0),
+        data.get("bytes_per_pixel", 2), data.get("target_folder", ""))
+    return _ok("FMR created.") if doc else _bad("Failed.")
+
+
 
 # ── FMR preprocessing ──────────────────────────────────────────────────────
 
@@ -279,6 +306,8 @@ def _get_vtcs_of_mdm(data: dict) -> str:
 HANDLERS: dict[str, callable] = {
     "create_fmr_dicom":              _create_fmr_dicom,
     "create_fmr_dicom_nifti_bids":   _create_fmr_dicom_nifti_bids,
+    "create_mosaic_fmr":             _create_mosaic_fmr,
+    "create_fmr":                    _create_fmr,
     "fmr_correct_motion":            _fmr_correct_motion,
     "fmr_correct_motion_to_vol":     _fmr_correct_motion_to_vol,
     "fmr_correct_slicetiming":       _fmr_correct_slicetiming,

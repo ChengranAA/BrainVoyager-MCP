@@ -66,6 +66,29 @@ def create_fmr_nifti_bids_from_bv_dicom(
         project_folder=project_folder, protocol_file=protocol_file)
 
 
+@mcp.tool()
+def create_fmr_from_bv_mosaic(
+    first_file: str, n_volumes: int, n_slices: int,
+    fmr_stc_filename: str, target_folder: str,
+    skip_n_volumes: int = 0, first_volume_amr: bool = False,
+    big_endian: bool = False, mosaic_rows: int = 0, mosaic_cols: int = 0,
+    slice_rows: int = 0, slice_cols: int = 0, bytes_per_pixel: int = 2,
+) -> str:
+    """Create an FMR from raw Siemens mosaic files.
+
+    Each volume is a single big image with all slices in a grid.
+    For DICOM mosaics, prefer create_fmr_from_bv_dicom."""
+    return call_bv_with_path(
+        "create_mosaic_fmr", first_file, timeout=60,
+        n_volumes=n_volumes, skip_n_volumes=skip_n_volumes,
+        first_volume_amr=first_volume_amr, n_slices=n_slices,
+        fmr_stc_filename=fmr_stc_filename, big_endian=big_endian,
+        mosaic_rows=mosaic_rows, mosaic_cols=mosaic_cols,
+        slice_rows=slice_rows, slice_cols=slice_cols,
+        bytes_per_pixel=bytes_per_pixel, target_folder=target_folder)
+
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # FMR Preprocessing Pipeline
 # ═══════════════════════════════════════════════════════════════════════════
