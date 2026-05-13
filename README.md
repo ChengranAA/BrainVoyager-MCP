@@ -9,8 +9,8 @@ Zed, Cursor, etc.) via the
 ```
 ┌──────────────────────┐    HTTP POST     ┌──────────────────────────────┐
 │  AI Agent (Claude)   │ ──────────────→  │  bv_core_server.py           │
-│                      │                  │  bv_anatomy_server.py         │
-│  MCP Client config:  │                  │  bv_fmri_server.py            │
+│                      │                  │  bv_anatomy_server.py        │
+│  MCP Client config:  │                  │  bv_fmri_server.py           │
 │    - BV Core         │                  │                              │
 │    - BV Anatomy      │                  │  Each is a FastMCP instance  │
 │    - BV fMRI         │                  │  calling _shared/bv_client   │
@@ -25,9 +25,9 @@ Zed, Cursor, etc.) via the
 │       │  ALL_HANDLERS["action"](data)   ← O(1) hash table    │
 │       ▼                                                      │
 │  bv_plugin/listener_handlers/                                │
-│       ├── core_handlers.py    →  bv.open_document(), etc.     │
+│       ├── core_handlers.py    →  bv.open_document(), etc.    │
 │       ├── anatomy_handlers.py →  vmr.deface(), etc.          │
-│       └── fmri_handlers.py    →  bv.get_vtcs_of_mdm(), etc.   │
+│       └── fmri_handlers.py    →  bv.get_vtcs_of_mdm(), etc.  │
 │                                                              │
 │  bv_auto_load/mcp_helper.py  →  MP2RAGE denoising, utilities │
 └──────────────────────────────────────────────────────────────┘
@@ -55,14 +55,14 @@ MCP/
 │   ├── bv_anatomy_server.py
 │   └── bv_fmri_server.py
 │
-├── bv_plugin/                  # → Copy into BV's plugin directory
+├── bv_plugin/                  # → Run inside of BV's Python Development Panel
 │   ├── mcp_listener.py         # Run this from BV's Python Plugin editor
 │   └── listener_handlers/      # Hash-table dispatch (no if/elif chains)
 │       ├── core_handlers.py
 │       ├── anatomy_handlers.py
 │       └── fmri_handlers.py
 │
-└── bv_auto_load/               # → Copy into BV's auto-load directory
+└── bv_auto_load/               # → Copy into BV's Python Scripts directory
     └── mcp_helper.py           # MP2RAGE denoising, VMR utilities
 ```
 
