@@ -33,7 +33,7 @@ Zed, Cursor, etc.) via the
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Three small servers instead of one monolith.** This follows the MCP ecosystem
+**Three small servers.** This follows the MCP ecosystem
 standard — the user enables only the servers they need per session, keeping the
 AI's context window lean.
 
@@ -70,8 +70,7 @@ MCP/
 
 ### 1. Inside BrainVoyager
 
-Copy the `bv_auto_load/` and `bv_plugin/` folders into BrainVoyager's plugin
-directory. Then open BV's **Python Plugin** panel, open `mcp_listener.py`, and
+Copy the files inside of `bv_auto_load/` folders into BrainVoyager's `PythonScripts` folder. Then open BV's **Python Python Development** panel, open `mcp_listener.py`, and
 run it. You should see:
 
 ```
@@ -81,6 +80,7 @@ SUCCESS: Real-time listener active on 127.0.0.1:5050
 BV's UI stays responsive thanks to a non-blocking socket polled by QTimer.
 
 ### 2. MCP Client Config
+Set up python environment with uv using `uv sync`.
 
 Uses `uv run` to pick up the project's Python environment automatically:
 
