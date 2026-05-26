@@ -1,11 +1,48 @@
 ## Rules for running tools
-- CRITICAL: Do NOT read, list, or access the `skills/` folder or any files within it unless the user explicitly asks you to do so. The skills folder contains instructional content that should only be consulted on demand.
 - Use Absolute Paths: ALWAYS use absolute paths when referencing directories and files to avoid routing errors either in python scripts or tool calls.
 - Verify Existence First: ALWAYS verify that a file actually exists before attempting to open or modify it with any tool.
 - DON'T list files in potential DICOM directories because they may have too many files. Try to count the number of files first and then list only the ones that are relevant for the analysis.
-- If there is no suitable tools and it needs BrainVoyager's environment to handle, try to construct a shell command and run with `run_bv_shell_command` tool.
-- For batch processing. DON'T call mcp tools repeatedly, use BrainVoyager's ability to run shell commands with python scripts. All the python API information is available use `BrainVoyager-API-search` MCP tool. The 'bv' python object is automatically available in the script environment, so don't try to import it yourself.
-- When writing python scripts, avoid using `__file__` or things that might be not available in the BrainVoyager's embedded python environment.
+
+### When to use each execution tool
+- **`exec_bv_python`** — Run Python scripts INSIDE BrainVoyager's process. The `bv` object is pre-injected and gives direct access to BV's entire Python API (documents, methods, properties). Use this for: multi-step BV operations, batch processing FMR/VMR/VTC, reading/writing document attributes, calling `bv.open_document()`, `bv.active_document`, etc. `print()` output is captured as `stdout`. Set a `result` variable to return a value. This is the PREFERRED tool for any Python logic that needs the BV API.
+- **`run_bv_shell_command`** — Run external shell commands. Use this for: FSL tools (topup, applytopup, fslmerge), system utilities, or any command that runs OUTSIDE BrainVoyager's process. The command runs in a subprocess; BV blocks until it completes.
+- **Individual MCP tools** (e.g., `open_bv_document`, `fmr_correct_motion`) — Use for single, one-off operations. For batch processing or multi-step workflows, prefer `exec_bv_python` with a script.
+
+## Agent Skills (progressive disclosure)
+
+Skills live in `prompt/skills/<skill-name>/SKILL.md`. Use the 3-stage progressive
+disclosure pattern below to keep context lean:
+
+### Stage 1 — Discovery (already done — skill registry below)
+The skill list below serves as the pre-loaded discovery cache (~100 tokens). If new
+skills are added later, discover them by reading ONLY the YAML frontmatter of each
+`prompt/skills/*/SKILL.md`. Never read full SKILL.md bodies during discovery.
+
+### Stage 2 — Activation (on each user request)
+1. Compare the user's request against the skill descriptions below.
+2. If a skill matches (keyword overlap, domain relevance), read the FULL `SKILL.md`.
+   Multiple skills may activate at once.
+3. If no skill matches, proceed without loading any skill.
+
+### Stage 3 — Execution
+1. Follow the step-by-step instructions in the activated skill(s).
+2. Skills may cross-reference each other (e.g., bv-fmr-creation needs bv-dicom-setup).
+   If a referenced skill is not yet loaded, read its SKILL.md too.
+3. Use the MCP tools, `exec_bv_python`, and `run_bv_shell_command` as directed by the
+   skill and the execution tool rules below.
+
+### Skill registry (discovery cache)
+- `bv-dicom-setup` — DICOM rename, anonymize, series discovery, project dictionaries
+- `bv-fmr-creation` — Create FMR from DICOM mosaic/single-image, BIDS export, AP/PA
+- `bv-fmri-preprocessing` — Slice timing, motion correction, high-pass filter, spatial smooth
+- `bv-distortion-correction` — FSL topup/applytopup for EPI distortion correction
+- `bv-anatomical-pipeline` — VMR creation, MP2RAGE denoising, IIHC, isovoxel, MNI, Tal
+- `bv-coregistration-vtc` — BBR/intensity coregistration, VTC in native/MNI/Tal space
+
+### Batch processing
+- DON'T call MCP tools in a loop. Instead, write a Python script and run it once via `exec_bv_python`. The `bv` object is automatically available — do NOT try to `import bv` or `import brainvoyager`.
+- For long scripts, use `exec_bv_python` with a reasonable `timeout_seconds`. Complex operations like BBR coregistration or VTC creation may need 300+ seconds.
+- When writing Python scripts for BV, avoid `__file__` or anything not available in BV's embedded Python environment. Use `os.getcwd()` and `os.chdir()` carefully — BV may change the working directory.
 
 ## File format
 Core Project Files
