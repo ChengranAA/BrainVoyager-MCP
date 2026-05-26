@@ -1,9 +1,12 @@
-"""Core action handlers — document, DICOM, log, UI, shell.
+"""Core action handlers — document, DICOM, log, UI, shell, Python exec.
 
 ``_bv`` is injected by ``listener_handlers.set_bv()`` at listener startup.
 """
 
+import io
 import json
+import sys
+import traceback
 
 # Injected by set_bv() — do NOT use bare `bv` as an implicit global.
 _bv = None
@@ -171,6 +174,64 @@ def _run_cmd(data: dict) -> str:
     return _ok(json.dumps({"result": _bv.run_cmd(cmd)}))
 
 
+# ── Python exec (compile + exec, preserves bv) ─────────────────────────────
+
+def _exec_python(data: dict) -> str:
+    """Execute arbitrary multi-line Python code inside BV's process.
+
+    Uses ``compile()`` + ``exec()`` so the injected ``bv`` object is
+    available without any serialization round-trip.  Stdout/stderr are
+    captured and returned alongside any ``result`` variable the user sets.
+    """
+    code = data.get("code", "")
+    if not code:
+        return _bad("Missing 'code' parameter.")
+
+    _bv.print_to_log(f"MCP exec_python: {code[:80]}...")
+
+    stdout_buf = io.StringIO()
+    stderr_buf = io.StringIO()
+
+    # Build a namespace that already contains bv — the user's code can
+    # reference it directly without importing or receiving it.
+    namespace: dict = {"bv": _bv}
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    try:
+        sys.stdout = stdout_buf
+        sys.stderr = stderr_buf
+
+        compiled = compile(code, "<mcp_exec>", "exec")
+        exec(compiled, namespace)
+    except Exception:
+        return _bad(traceback.format_exc())
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+    output = stdout_buf.getvalue()
+    err_output = stderr_buf.getvalue()
+
+    # If the user set a ``result`` variable, return it as the primary result.
+    user_result = namespace.get("result")
+
+    response_parts: dict = {}
+    if user_result is not None:
+        response_parts["result"] = str(user_result)
+    elif output:
+        response_parts["result"] = output
+    else:
+        response_parts["result"] = "Code executed successfully (no output)."
+
+    if output:
+        response_parts["stdout"] = output
+    if err_output:
+        response_parts["stderr"] = err_output
+
+    return _ok(json.dumps(response_parts))
+
+
 # ── application control ────────────────────────────────────────────────────
 
 def _exit(_data: dict) -> str:
@@ -245,4 +306,5 @@ HANDLERS: dict[str, callable] = {
     "resize_window":             _resize_window,
     "choose_directory":          _choose_directory,
     "choose_file":               _choose_file,
+    "exec_python":                _exec_python,
 }

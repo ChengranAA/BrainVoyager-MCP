@@ -163,6 +163,34 @@ def print_to_bv_log(text: str) -> str:
     return call_bv("print_to_log", timeout=5, text=text)
 
 
+# ── Python Exec ───────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def exec_bv_python(code: str, timeout_seconds: int = 30) -> str:
+    """Execute arbitrary Python code inside BrainVoyager's process.
+
+    The code runs via ``compile()`` + ``exec()`` with the ``bv`` object
+    already in scope — no serialization, no dropped references.  Use this
+    for multi-line scripts that need direct access to BV's API.
+
+    - ``bv`` is pre-injected: you can call ``bv.methods()``, etc. directly.
+    - ``print()`` output is captured and returned as ``stdout``.
+    - Set a ``result`` variable to return a specific value (e.g.
+      ``result = bv.active_document.file_name``).
+
+    Example:
+        code = '''
+    doc = bv.active_document
+    if doc:
+        result = f"{doc.file_name}: {doc.dim_x}x{doc.dim_y}x{doc.dim_z}"
+    else:
+        result = "No document open"
+    '''
+    """
+    return call_bv("exec_python", timeout=timeout_seconds, code=code)
+
+
 # ── Shell ─────────────────────────────────────────────────────────────────
 
 
