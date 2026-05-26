@@ -1,0 +1,48 @@
+## Rules for running tools
+- CRITICAL: Do NOT read, list, or access the `skills/` folder or any files within it unless the user explicitly asks you to do so. The skills folder contains instructional content that should only be consulted on demand.
+- Use Absolute Paths: ALWAYS use absolute paths when referencing directories and files to avoid routing errors either in python scripts or tool calls.
+- Verify Existence First: ALWAYS verify that a file actually exists before attempting to open or modify it with any tool.
+- DON'T list files in potential DICOM directories because they may have too many files. Try to count the number of files first and then list only the ones that are relevant for the analysis.
+- If there is no suitable tools and it needs BrainVoyager's environment to handle, try to construct a shell command and run with `run_bv_shell_command` tool.
+- For batch processing. DON'T call mcp tools repeatedly, use BrainVoyager's ability to run shell commands with python scripts. All the python API information is available use `BrainVoyager-API-search` MCP tool. The 'bv' python object is automatically available in the script environment, so don't try to import it yourself.
+- When writing python scripts, avoid using `__file__` or things that might be not available in the BrainVoyager's embedded python environment.
+
+## File format
+Core Project Files
+FMR files - Functional projects
+DMR files - Diffusion-weighted projects
+AMR files - Anatomical or functional inplane data
+VMR files - High-resolution 3D anatomical projects
+SRF files - Surface (mesh) representations, typically of reconstructed head skin and (morphed) cortical hemispheres Functional and Diffusion-Weighted Data Files
+STC files - Functional data belonging to an FMR project file
+DWI files - Diffusion-weighted data belonging to a DMR project file
+VTC files - Functional data transformed in a 3D reference space, e.g.Talairach space
+VDW files - Diffusion-weighted data transformed in a 3D reference space
+MTC files - Mesh time course files Analysis Result Files
+GLM files - Result of statistical GLM analysis for FMR-STC, VMR-VTC and SRF-MTC projects
+AVA files - Result of ANCOVA analysis for VMR-VTC and SRF-MTC projects (Statistical) Map Files
+MAP files - Slice-based files containing real values, e.g. from statistical tests
+VMP files - 3D map files containing float values, e.g. from statistical tests (in "native" (e.g. VTC) resolution)
+ICA files - Independent component analysis file: special VMP file with some extra information
+AR-VMP files - 3D map files containing float values, e.g. from statistical tests (in anatomical (VMR) resolution)
+SMP files - Surface-based statistical files containing real values, e.g. from statistical tests
+PMP files - Spherical map (coordinates-based) Region-Of-Interest Files
+VOI files - Files containing a description of a set of volumes-of-interest (VOIs)
+VOM files - Files containing native resolution volumes-of-interest and optionally associated map data
+POI files - Files containing a description of a set of patches-of-interest (POIs)
+RTC files - Files containing time course data of regions-of-interest Spatial Transformation Files
+POS files - Slice positioning information files
+TRF files - Description of affine spatial transformations, typically rigid body transformations
+TAL files - Talairach coordinates, including AC, PC and cerebral border points
+LOG files - Log file created during interpolation or transformation
+SSM files - Sphere to sphere vertex mapping Experimental Design and Auxiliary Files
+PRT files - Protocol files describing experimental conditions
+SDM files - Contains the design matrix for time courses
+MDM files - Design matrix for group studies
+AVG files - Event related averaging (time course coordinates)
+DAT files - Event related averaging actual data
+MSK files - Mask file used to limit the amount of voxels in a statistical analysis
+CTR files - Contrast files for predictor selection Visualization Files
+VWP files - Visualization settings in the surface module (viewpoint etc.)
+FBR files - Fiber coordinates, e.g. from DTI data analysis Misceallaneous Files
+V16 files - High-resolution 3D anatomical files like VMR files but intensity values have 2 bytes
