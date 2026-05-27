@@ -38,11 +38,17 @@ AP FMR (2 vols)  +  PA FMR (2 vols)          Functional FMRs (all runs)
 - **FSL must be installed** (`topup`, `applytopup`, `fslmerge` on PATH)
 - **AP and PA acquisitions**: Short runs (2-5 volumes) with opposite phase-encoding directions
 - **All runs must be motion-corrected** (up to `_3DMCTS.fmr`) BEFORE distortion correction
+- **Apply topup BEFORE HPF and BBR** — the corrected FMR flows naturally through BV's
+  preprocessing pipeline. NIfTI→FMR round-trip through BV's affine is fragile; avoid re-import.
 - **Python packages**: `bvbabel`, `nibabel`, `numpy`
 
 ## Step 1: Convert FMR to NIfTI
 
-Motion-corrected FMRs must be converted to NIfTI for FSL. Use `exec_bv_python` with bvbabel:
+> **⚠ Mosaic FMR caveat**: `bvbabel.fmr.read_fmr()` fails on mosaic-created FMRs
+> because the header has `DimX=DimY=DimZ=0`. Use BV's internal NIfTI export instead:
+> `doc.save_as('output.nii')` via `exec_bv_python`. This produces proper affine and data.
+
+Motion-corrected FMRs must be converted to NIfTI for FSL.
 
 ```python
 import os
@@ -113,9 +119,53 @@ with open("/path/to/acqparams.txt", "w") as f:
     f.write(pa_line * 2)  # 2 PA volumes
 ```
 
-**The 4th column is the echo spacing (dwell time) in seconds**, NOT the total readout time. For Siemens, this is typically ~0.5-0.8 ms for standard sequences. The example pipeline uses 0.05 (50 ms) but this is the *effective echo spacing* which accounts for GRAPPA/accelerated acquisitions.
+**The 4th column is the total readout time in seconds**, in the range 0.01–0.2s.
+Topup will reject values outside this range. For 0.8mm mb2 EPI w/ GRAPPA3, ~0.03s is typical.
 
-**Finding echo spacing**: Check the DICOM header or BIDS JSON sidecar. For Siemens: (0019,1028). If unknown, 0.05 is a reasonable default for typical 3T EPI with acceleration.
+### Gotchas
+
+- **bvbabel fails on mosaic FMRs**: `create_mosaic_fmr` leaves DimX/DimY/DimZ=0 in the header.
+  Use BV's `doc.save_as('.nii')` instead of bvbabel for NIfTI conversion.
+- **fslmerge can't handle BV NIfTI**: Orientation inconsistency. Use Python nibabel to
+  concatenate along axis 3: `np.concatenate([ap, pa], axis=3)`.
+- **Reverse-PE scans share noise trim**: Same protocol = same noise volumes. If main run
+  trims N from end, reverse-PE scans trim N too (even though they're only 5v).
+- **Set FSLOUTPUTTYPE**: `export FSLOUTPUTTYPE=NIFTI_GZ` before running FSL tools.
+- **Topup timeout**: Topup can take minutes on large volumes. Submit and wait.
+- **Keep original BV NIfTI affines**: Use the affine from the first file when merging.
+
+## Step 5: Convert corrected NIfTI back to FMR
+
+After `applytopup`, convert the corrected NIfTI back to BV FMR/STC format:
+
+```python
+import numpy as np, nibabel as nb, shutil
+
+cd = '/path/to/preprocessed'
+corr = nb.load(cd+'/run_corrected.nii.gz').get_fdata()
+# NIfTI [X, Y, Z, T] → BV STC [T, Z, Y, X] in C order
+stc_data = np.transpose(corr, (3, 2, 1, 0)).astype(np.float32).copy()
+stc_data.tofile(cd+'/run_corrected.stc')
+
+# Clone FMR header — append topup suffix, don't strip preprocessing suffixes
+src_fmr = cd+'/run_THPGLMF3c.fmr'      # original after HPF
+dst_fmr = cd+'/run_THPGLMF3c_TOPPED.fmr'  # append _TOPPED
+shutil.copy(src_fmr, dst_fmr)
+
+# Update Prefix field (BV derives STC name from this)
+with open(dst_fmr) as f: content = f.read()
+# Replace ALL occurrences of the old prefix with the new one
+content = content.replace('run_THPGLMF3c', 'run_THPGLMF3c_TOPPED')
+with open(dst_fmr, 'w') as f: f.write(content)
+```
+
+**CRITICAL**:
+- **Append suffix, don't strip**: Use `_THPGLMF3c_TOPPED`, not `_corrected`.
+  Existing preprocessing suffixes tell you what's been applied.
+- **Update ALL prefix occurrences** in the FMR header — the `Prefix` field,
+  any STC references, and the filename itself.
+- **STC order**: BV stores `[T, Z, Y, X]` with X fast-varying in C order.
+  NIfTI is `[X, Y, Z, T]` → transpose to `(3,2,1,0)`.
 
 For LR/RL encoding instead of AP/PA:
 

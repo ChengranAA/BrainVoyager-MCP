@@ -1,6 +1,9 @@
 ## Rules for running tools
 - Use Absolute Paths: ALWAYS use absolute paths when referencing directories and files to avoid routing errors either in python scripts or tool calls.
 - Verify Existence First: ALWAYS verify that a file actually exists before attempting to open or modify it with any tool.
+- **BV tools complete despite MCP timeout** — When `rename_bv_dicoms`, `anonymize_bv_dicoms`, or other long-running BV operations return "Context server request timeout", the BV process may have ALREADY COMPLETED in the background. NEVER retry without first verifying the result on disk (e.g., `ls` a few output files). Retrying wastes time and may corrupt data.
+- **Post-rename whitespace cleanup** — After `rename_bv_dicoms` or `anonymize_bv_dicoms`, if the anonymized patient name is shorter than the original, BV pads the filename with spaces (e.g., `Subj01                      -0001-...dcm`). ALWAYS run a cleanup: `for f in *.dcm; do mv "$f" "$(echo $f | sed 's/ANONNAME[[:space:]]*/ANONNAME/g')"; done`
+- **MP2RAGE denoising requires V16 input** — `run_mp2rage_denoise` does NumPy math on V16 (uint16) data. Passing `.vmr` paths silently produces corrupted output (409KB VMR instead of 24MB). To create V16 files from VMR, open each VMR in BV first — BV auto-creates `*.v16` companions on load. Then pass the `.v16` paths to `run_mp2rage_denoise`.
 - CAUTION — Large directories: Never blindly `list_directory` on folders that may contain
   thousands of files (DICOM directories, raw scanner output, preprocessed runs, etc.).
   The output will bloat the context window. Instead:
@@ -24,7 +27,7 @@ disclosure pattern below to keep context lean:
 ### Stage 1 — Discovery (already done — skill registry below)
 The skill list below serves as the pre-loaded discovery cache (~100 tokens). If new
 skills are added later, discover them by reading ONLY the YAML frontmatter of each
-`prompts/skills/*/SKILL.md`. Never read full SKILL.md bodies during discovery.
+`./skills/*/SKILL.md`. Never read full SKILL.md bodies during discovery.
 
 ### Stage 2 — Activation (on each user request)
 1. Compare the user's request against the skill descriptions below.

@@ -19,6 +19,11 @@ Preprocess functional data: slice timing → motion correction → temporal filt
 
 ## Pipeline order (MUST follow this sequence)
 
+> **⚠ Always ask the user**: How many noise volumes to skip (usually at the END)?
+> Keep noise volumes → degrade motion correction & slice timing.
+> Skip them: reduce `n_volumes` at FMR creation (BV skip handles start only).
+> Or: externally denoise with NORDIC then keep all.
+
 ```
 FMR (raw STC)
   │
@@ -190,5 +195,6 @@ fmr_smooth_temporal(gauss_fwhm=2.0, fwhm_unit="data_points")
 - **Close documents between steps**: Each preprocessing step creates a new file and the old document stays open. Call `close_active_document()` between steps to avoid memory accumulation.
 - **Filename chain**: BV appends suffixes: `SCSTBL` (slice timing), `3DMCTS` (motion correction), `THPGLMF` (high-pass Fourier), `SD3DSS` (spatial smoothing). Don't rename intermediate files — downstream steps rely on the chain.
 - **Long timeouts**: Motion correction on large datasets (e.g., 500+ volumes, high-res) can take minutes. Increase `timeout_seconds` accordingly (default 120 s).
+- **Wait for user for long ops**: For large datasets where motion correction takes 5-15+ minutes, submit with a short timeout (~30s), then WAIT for the user to confirm completion before proceeding. BV continues in the background — never retry.
 - **STC vs FMR**: Slice timing and motion correction modify the `.stc` data file, and the `.fmr` file is updated to point to the new `.stc`. Both files must stay in the same directory.
 - **Multi-band data**: `correct_slicetiming_using_timingtable` automatically handles multi-band/simultaneous multi-slice (SMS) data. Do NOT specify a manual slice order.

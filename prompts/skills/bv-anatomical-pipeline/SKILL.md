@@ -99,8 +99,12 @@ The MP2RAGE UNI image has excellent T1 contrast but suffers from salt-and-pepper
 
 ### Input file requirements
 
-- **UNI, INV1, INV2** must be V16 files (2-byte integer, float values mapped to 0-4095)
-- If only VMR files are available, BV can create V16 from VMR, or you may need to use `bvbabel.vmr.read_vmr` and `bvbabel.v16.write_v16`
+- **UNI, INV1, INV2** MUST be V16 files (2-byte integer, float values mapped to 0-4095).
+  **CRITICAL**: Passing `.vmr` paths to `run_mp2rage_denoise` silently produces a corrupted
+  output (e.g., 409KB VMR instead of 24MB). The tool does NumPy math on uint16 raw
+  data, which VMR (uint8 byte-packed) cannot provide.
+- To create V16 from VMR: open each VMR in BV first — BV auto-creates `*.v16`
+  companions on disk. Then pass the `.v16` paths.
 - All three must have matching dimensions; mismatches in phase-encode direction are auto-corrected
 
 ## Step 3: Intensity inhomogeneity correction (IIHC)
@@ -145,7 +149,13 @@ correct_bv_vmr_intensity_inhomogeneities_ext(
 
 ## Step 4: Isovoxel resampling
 
-Resample to 1 mm isotropic in a 256³ framing cube (standard for MNI normalization):
+> **IMPORTANT**: Always ask the user for the target resolution before resampling.
+> Different analyses have different requirements:
+> - **Layer-dependent / laminar fMRI**: Keep native sub-mm resolution (e.g., 0.7 mm).
+> - **Standard group analysis**: 1.0 mm iso is conventional.
+> - **Custom**: Match the functional acquisition resolution.
+
+Resample to the chosen isotropic resolution.
 
 ```python
 # Open the IIHC-corrected VMR
@@ -193,7 +203,13 @@ This reorients to radiological convention (left-is-right on sagittal views).
 
 ## Step 6: MNI normalization
 
-Normalize the isovoxel brain to MNI-152 template space:
+Normalize the isovoxel brain to MNI-152 template space.
+
+> **⚠ Sub-millimeter limitation**: BV's `auto_acpc_tal_bv_vmr_transformation`
+> and `normalize_bv_vmr_to_mni_space` do NOT work for voxels < 1.0 mm.
+> For sub-mm data (e.g., 0.7 mm MP2RAGE for layer-dependent analysis),
+> manual AC-PC alignment in BV is required before spatial normalization.
+> 1.0 mm iso is the minimum resolution for automatic tools.
 
 ```python
 # Open the isovoxel VMR

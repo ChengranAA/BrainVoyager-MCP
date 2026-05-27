@@ -55,27 +55,62 @@ Examples:
 
 ## Alternative: Raw mosaic FMR creation
 
-If you need fine control over mosaic parameters (older Siemens data), use `create_fmr_from_bv_mosaic`:
+> **⚠ Always ask the user about noise volumes BEFORE creating FMRs.**
+> Initial dummy volumes (5-10 TRs) should be skipped if not denoised externally
+> (e.g., NORDIC), as they degrade motion correction and slice timing algorithms.
 
-```
-create_fmr_from_bv_mosaic(
-    first_file="/path/to/dicoms/first_volume.dcm",
-    n_volumes=240,
-    n_slices=72,
-    fmr_stc_filename="subj01_task_run1",
-    target_folder="/path/to/output",
-    skip_n_volumes=0,
-    first_volume_amr=False,
-    big_endian=False,
-    mosaic_rows=64,        # from ds.Rows
-    mosaic_cols=64,        # from ds.Columns
-    slice_rows=104,        # from ds.AcquisitionMatrix
-    slice_cols=104,        # from ds.AcquisitionMatrix
-    bytes_per_pixel=2
+**Recommended approach**: Use `bv.create_mosaic_fmr()` inside `exec_bv_python`.
+
+```python
+# Inside exec_bv_python:
+doc = bv.create_mosaic_fmr(
+    first_file,        # path to first DICOM file
+    n_volumes,         # e.g., 244
+    0,                 # skip_n_volumes
+    False,             # first_volume_amr
+    n_slices,          # e.g., 72
+    fmr_stc_filename,  # output name without extension
+    False,             # big_endian
+    mosaic_rows,       # = Rows / slice_rows (e.g., 9)
+    mosaic_cols,       # = Cols / slice_cols (e.g., 9)
+    slice_rows,        # from AcquisitionMatrix phase dimension
+    slice_cols,        # from AcquisitionMatrix readout dimension
+    2,                 # bytes_per_pixel (uint16)
+    target_folder
 )
 ```
 
-**When to use this vs `create_fmr_from_bv_dicom`**: Only when you need to override DICOM header values (e.g., custom mosaic dimensions, skipping initial volumes within the creation step).
+**Mosaic parameters** — `mosaic_rows`/`mosaic_cols` are the FULL image dimensions (ds.Rows × ds.Columns), NOT the tile count. Parse from DICOM:
+```python
+import pydicom
+ds = pydicom.dcmread(first_file)
+nr_slices = ds[0x19, 0x100a].value      # Siemens private slice count
+big_endian = not ds.is_little_endian
+mosaic_rows = ds.Rows                     # full mosaic height (e.g., 2214)
+mosaic_cols = ds.Columns                  # full mosaic width (e.g., 2250)
+slice_cols = ds.AcquisitionMatrix[0]      # readout dim
+slice_rows = ds.AcquisitionMatrix[-1]     # phase encode dim
+bytes_per_pixel = 2
+```
+
+> **🔍 Identifying reverse-PE pairs vs main runs**: BV's classifier labels
+> short acquisitions as **`DWI / FUNC`** and main runs as **`FUNC / DWI`**.
+> These short scans are the SAME EPI/BOLD as the main run, just phase-
+> reversed — used for FSL topup. Always confirm pairing with the user.
+
+> **⚠ Preprocess reverse-PE scans too**: Short reverse-PE acquisitions need
+> the same preprocessing as main runs (FMR creation, slice timing, motion
+> correction) before they can be used for FSL topup. Use the same mosaic
+> parameters and pipeline. Skip noise volume trimming on these (they're
+> already short). Do NOT high-pass filter them — keep the raw signal.
+
+
+**When to use**: For Siemens mosaic data. `create_mosaic_fmr` preserves the DICOM timing table for slice-time correction.
+
+> **⏱ Timeout pattern**: FMR creation on mosaic data creates large STC files (4+ GB)
+> and often exceeds tool timeouts. Set a short timeout (~30s), submit, and WAIT
+> for the user to confirm completion before proceeding. Never retry — BV runs in
+> the background and retrying may corrupt data.
 
 ## BIDS NIfTI export
 

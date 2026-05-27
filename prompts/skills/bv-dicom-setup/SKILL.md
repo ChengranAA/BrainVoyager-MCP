@@ -40,7 +40,24 @@ anonymize_bv_dicoms(directory="/path/to/raw/dicoms", anonymized_patient_name="Su
 
 **Gotcha**: These tools rename files in-place and modify DICOM header tag (0010,0010) for anonymize. Work on a copy of the raw data if you need to preserve originals.
 
-## Step 2: Discover functional series (build FMR project dictionary)
+## Step 2: Discover all series — present a complete inventory
+
+> **⚠ ALWAYS present the user with a FULL DICOM inventory first.** DICOM series
+> can be messy: runs may be unnamed, descriptions may not match expectations,
+> SE pairs can be shared or per-run, and unexpected acquisitions (e.g., retinotopy)
+> may hide under generic names. Present the complete list and let the user
+> classify the data before processing anything.
+
+> **Also ask the user**: _What analysis are you planning?_ (standard GLM, layer-
+> dependent, retinotopy/pRF, resting-state). This determines resolution choices,
+> noise-volume handling, and whether distortion correction is needed.
+
+Run a discovery script in `exec_bv_python` or `run_bv_shell_command` that prints
+for each series: filename, file count, ImageType[2], SeriesDescription.
+
+BV's internal classifier labels **`DWI / FUNC`** = short reverse-PE acquisitions
+(typically 5 vols, for topup) and **`FUNC / DWI`** = main functional runs (many
+vols). Use this to auto-categorize, but always confirm with the user.
 
 After renaming, you need to identify which DICOMs belong to which functional runs. This requires parsing DICOM headers with `pydicom`. Use `run_bv_shell_command` or `exec_bv_python` to run a discovery script.
 
@@ -138,6 +155,7 @@ for filename in sorted(v1i1):
 
 - **BV changes working directory**: Always `os.chdir(data_dir)` before DICOM operations. BV may reset CWD to its install path.
 - **DICOM filenames before renaming**: Raw DICOM filenames vary by scanner. Always rename first.
+- **Post-rename whitespace cleanup**: When anonymized name is shorter than original, BV pads filenames with spaces (e.g., `Subj01                      -0001-...dcm`). Always run: `for f in *.dcm; do mv "$f" "$(echo $f | sed 's/NEWNAME[[:space:]]*/NEWNAME/g')"; done`
 - **Mosaic vs single-image DICOM**: Siemens mosaics use tags (0028,0010)=(0028,0011)=mosaic size, while actual slice dims are in AcquisitionMatrix. The `create_fmr_from_bv_dicom` tool handles this automatically.
 - **Phase images**: ImageType[2]='P' are phase images from phased-array coils. Skip them unless specifically needed.
 - **Large DICOM directories**: Do NOT list all files—use glob patterns. Count files instead with len(glob(...)).
