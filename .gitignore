@@ -33,3 +33,4 @@ Makefile
 
 # ── Environment / secrets ────────────────────────────────────────────
 .env
+.agents/

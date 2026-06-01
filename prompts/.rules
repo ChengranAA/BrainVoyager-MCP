@@ -19,38 +19,6 @@
 - **`run_bv_shell_command`** — Run external shell commands. Use this for: FSL tools (topup, applytopup, fslmerge), system utilities, or any command that runs OUTSIDE BrainVoyager's process. The command runs in a subprocess; BV blocks until it completes.
 - **Individual MCP tools** (e.g., `open_bv_document`, `fmr_correct_motion`) — Use for single, one-off operations. For batch processing or multi-step workflows, prefer `exec_bv_python` with a script.
 
-## Agent Skills (progressive disclosure)
-
-Skills live in `prompts/skills/<skill-name>/SKILL.md`. Use the 3-stage progressive
-disclosure pattern below to keep context lean:
-
-### Stage 1 — Discovery (already done — skill registry below)
-The skill list below serves as the pre-loaded discovery cache (~100 tokens). If new
-skills are added later, discover them by reading ONLY the YAML frontmatter of each
-`./skills/*/SKILL.md`. Never read full SKILL.md bodies during discovery.
-
-### Stage 2 — Activation (on each user request)
-1. Compare the user's request against the skill descriptions below.
-2. If a skill matches (keyword overlap, domain relevance), read the FULL `SKILL.md`.
-   Multiple skills may activate at once.
-3. If no skill matches, proceed without loading any skill.
-
-### Stage 3 — Execution
-1. Follow the step-by-step instructions in the activated skill(s).
-2. Skills may cross-reference each other (e.g., bv-fmr-creation needs bv-dicom-setup).
-   If a referenced skill is not yet loaded, read its SKILL.md too.
-3. Use the MCP tools, `exec_bv_python`, and `run_bv_shell_command` as directed by the
-   skill and the execution tool rules below.
-
-### Skill registry (discovery cache)
-- `bv-dicom-setup` — DICOM rename, anonymize, series discovery, project dictionaries
-- `bv-fmr-creation` — Create FMR from DICOM mosaic/single-image, BIDS export, AP/PA
-- `bv-fmri-preprocessing` — Slice timing, motion correction, high-pass filter, spatial smooth
-- `bv-distortion-correction` — FSL topup/applytopup for EPI distortion correction
-- `bv-anatomical-pipeline` — VMR creation, MP2RAGE denoising, IIHC, isovoxel, MNI, Tal
-- `bv-coregistration-vtc` — BBR/intensity coregistration, VTC in native/MNI/Tal space
-- `bv-file-formats` — Complete reference: binary structures, field specs, bvbabel read/write patterns for all BV file formats (VMR, V16, FMR/STC, VTC, TRF, PRT, SDM, MDM, GLM, VMP, SMP, SRF, MSK, MTC, GTC, POI, SSM, VOI). Activate alongside pipeline skills whenever file-level operations are needed.
-
 ### Batch processing
 - DON'T call MCP tools in a loop. Instead, write a Python script and run it once via `exec_bv_python`. The `bv` object is automatically available — do NOT try to `import bv` or `import brainvoyager`.
 - For long scripts, use `exec_bv_python` with a reasonable `timeout_seconds`. Complex operations like BBR coregistration or VTC creation may need 300+ seconds.
@@ -59,7 +27,7 @@ skills are added later, discover them by reading ONLY the YAML frontmatter of ea
 ## File Formats (full specs in `bv-file-formats` skill)
 
 For complete field-level specifications (binary offsets, data types, struct formats),
-axis conventions, and bvbabel read/write patterns, activate the `bv-file-formats` skill.
+axis conventions, and bvbabel read/write patterns, see the `bv-file-formats` skill.
 
 ### Quick reference: formats by category
 

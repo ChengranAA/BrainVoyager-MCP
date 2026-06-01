@@ -4,297 +4,80 @@ description: >
   Coregister preprocessed FMR data to anatomical VMR and create VTC files in native,
   MNI, or Talairach space. Covers BBR (boundary-based registration) and intensity-based
   coregistration, VTC creation with full parameter control, VTC-level filtering/smoothing,
-  and linking VTCs to MDM group design matrices. Use when the user needs to "coregister
-  functional to anatomical," "create VTC," "transform to MNI," "transform to Talairach,"
-  "link VTC," or "set up group analysis." Assumes anatomical VMR is preprocessed
-  (IIHC + isovoxel) and FMR is preprocessed (slice timing + motion correction).
-compatibility: Requires BrainVoyager MCP (fMRI + Anatomy servers). Preprocessed VMR and FMR must exist.
-metadata:
-  author: bv-mcp
-  version: "1.0"
+  and linking VTCs to MDM group design matrices. Use when the user needs to coregister
+  functional to anatomical, create VTC, transform to MNI, transform to Talairach, link
+  VTC, or set up group analysis. Assumes anatomical VMR is preprocessed (IIHC + isovoxel)
+  and FMR is preprocessed (slice timing + motion correction).
 ---
 
-# BrainVoyager Coregistration & VTC Creation
-
-Align functional data to anatomy and transform to reference space.
+## Overview
+Aligns preprocessed functional data to anatomy (coregistration), then transforms the 4D time series into a 3D reference space (VTC creation) in native, MNI, or Talairach space.
 
 ## Workflow
-
 ```
-Preprocessed FMR + Preprocessed VMR
-        │
-        ├─ [1] Coregister FMR to VMR   ← BBR (preferred) or intensity-based
-        │       Produces: IA.trf, FA.trf
-        │
-        ├─ [2] Create VTC               ← native / MNI / Tal space
-        │       Produces: .vtc file
-        │
-        ├─ [3] VTC post-processing      ← high-pass filter, spatial smooth
-        │
-        └─ [4] Link VTC to MDM          ← for group GLM
+Preprocessed FMR + IIHC VMR → IA → FA → VTC (native/MNI/Tal) → Link → Post-process
 ```
 
 ## Prerequisites
+- FMR: minimum slice-timing + motion-corrected. HPF and smoothing optional (can do at VTC level).
+- VMR: IIHC-corrected (preferred — better brain extraction → better BBR). Must be isovoxel.
+- For MNI VTC: `*_MNI.trf` from anatomical pipeline. For Tal VTC: `*_ACPC.trf` + `*_TAL.tal`.
 
-1. **Preprocessed FMR**: At minimum, slice-timing + motion-corrected. High-pass filtering and smoothing are optional (can be done at VTC level).
-2. **Preprocessed VMR**: IIHC-corrected + isovoxel. MNI/Tal normalization if creating VTC in those spaces.
-3. **All files in the same directory** (or use absolute paths).
+## Step 1: Coregistration
 
-## Step 1: Coregister FMR to VMR
+Two methods. BBR is preferred.
 
-### Method A: BBR (Boundary-Based Registration) — Recommended
+### BBR (recommended)
+`vtc_coregister_fmr_to_vmr_bbr(fmr_file, timeout_seconds=300)` — VMR must be open.
+- How it works: auto-segments VMR to find WM/GM boundary → creates mesh (.srf) → aligns EPI by maximizing intensity gradient at the boundary
+- "Invert intensities" is ON by default (T2* EPI → appears T1-like for gradient alignment)
+- Segmentation is automatic, different from full cortex segmentation pipeline
+- First run slow (mesh creation), subsequent runs reuse mesh
+- Produces: `FMRname-TO-VMRname_IA.trf` and `FMRname-TO-VMRname_FA.trf`
 
-BBR is more accurate, especially for EPI data with distortion. It uses the brain boundary from the VMR segmentation.
+### Intensity-based (fallback)
+`vtc_coregister_fmr_to_vmr(fmr_file, iihc_func=False, timeout_seconds=300)`
+- IA (Initial Alignment): mathematically exact for same-session DICOM using scanner geometry headers
+- FA (Fine-Tuning): iterative gradient-driven (trilinear → sinc)
+- Optimal source: UNpreprocessed FMR (T1-saturated first volume gives best contrast via linked AMR)
+- For multi-run across-run MC data: use preprocessed FMR (BV replaces AMR with `_CoregFirstVol.amr`)
+- `iihc_func=True`: apply IIHC to first functional volume (7T or severe bias field)
 
-```python
-# Open the preprocessed VMR (IIHC + isovoxel)
-open_bv_document("/path/to/Subj01_UNI_IIHC_ISO.vmr")
-
-# Run BBR coregistration
-vtc_coregister_fmr_to_vmr_bbr(
-    fmr_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF.fmr",
-    timeout_seconds=300
-)
-```
-
-**How BBR works**:
-1. Initial alignment using DICOM header geometry
-2. BV segments the VMR to find the WM/GM boundary
-3. Creates a mesh of the boundary (stored as `.srf` file)
-4. Iteratively aligns the EPI to maximize intensity gradient at the boundary
-5. Produces `*_IA.trf` (initial alignment) and `*_FA.trf` (final alignment)
-
-**The first BBR run is slow** because BV must segment the VMR and create the mesh. Subsequent runs on the same VMR reuse the mesh and are much faster.
-
-### Method B: Intensity-based coregistration
-
-Fallback when BBR mesh creation fails (e.g., poor brain extraction):
-
-```python
-open_bv_document("/path/to/Subj01_UNI_IIHC_ISO.vmr")
-
-vtc_coregister_fmr_to_vmr(
-    fmr_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF.fmr",
-    iihc_func=False,   # apply IIHC to first functional volume?
-    use_attached_amr=0,  # 0=use first vol, 1=use attached AMR
-    timeout_seconds=300
-)
-```
-
-### Coregistering multiple runs
-
-Each run must be coregistered individually:
-
-```python
-fmr_files = [
-    "Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF.fmr",
-    "Subj01_Task_run02_M_SCSTBL_3DMCTS_THPGLMF.fmr",
-    # ...
-]
-
-open_bv_document("/path/to/Subj01_UNI_IIHC_ISO.vmr")
-
-for fmr in fmr_files:
-    vtc_coregister_fmr_to_vmr_bbr(
-        fmr_file=f"/path/to/{fmr}",
-        timeout_seconds=300
-    )
-    print(f"Coregistered: {fmr}")
-```
-
-**Output for each run**:
-- `*_IA.trf` — initial alignment transformation
-- `*_FA.trf` — final alignment transformation
-- `*_IA-TO-FA.trf` — combined IA + FA
-
-These `.trf` files are needed for VTC creation.
+Multiple runs: coregister each individually. VMR must stay open.
 
 ## Step 2: Create VTC
 
-### VTC in native VMR space
+### Native space
+`vtc_create_in_native_space(fmr_file, ia_trf, fa_trf, vtc_file, res_to_anat, interpolation, bbox_threshold, data_type)`
 
-```python
-# VMR must be open (the same VMR used for coregistration)
-open_bv_document("/path/to/Subj01_UNI_IIHC_ISO.vmr")
+### MNI space
+`vtc_create_in_mni_space(fmr_file, ia_trf, fa_trf, mni_trf_file, vtc_file, ...)` — requires `*_MNI.trf`
 
-vtc_create_in_native_space(
-    fmr_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF.fmr",
-    coreg_ia_trf_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_IA.trf",
-    coreg_fa_trf_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_FA.trf",
-    vtc_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_NATIVE.vtc",
-    res_to_anat=2,                          # 1=same as VMR, 2=double voxel size
-    interpolation_method=2,                 # 2=cubic, 1=trilinear, 3=sinc
-    bounding_box_intensity_threshold=100,   # separates brain from background
-    data_type=2                             # 2=uint16, 3=float32
-)
-```
+### Talairach space
+`vtc_create_in_tal_space(fmr_file, ia_trf, fa_trf, acpc_trf_file, tal_file, vtc_file, ...)` — requires `*_ACPC.trf` + `*_TAL.tal`
 
-### VTC in MNI space
+### Parameter guide
 
-Requires the MNI transformation from anatomical preprocessing:
+| Parameter | Options | Recommendation |
+|-----------|---------|----------------|
+| res_to_anat | 1=same, 2=double, 3=triple | 2 for standard fMRI, 1 for high-res |
+| interpolation | 1=trilinear, 2=cubic, 3=sinc | 2 (standard), 3 (publication) |
+| bbox_threshold | 50-150 | 100 default (WM~150, GM~100, CSF~60) |
+| data_type | 1=uint8, 2=uint16, 3=float32 | 2 (standard fMRI), 3 (exact float values) |
 
-```python
-vtc_create_in_mni_space(
-    fmr_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF.fmr",
-    coreg_ia_trf_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_IA.trf",
-    coreg_fa_trf_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_FA.trf",
-    mni_trf_file="/path/to/Subj01_UNI_IIHC_ISO_MNI.trf",
-    vtc_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_MNI.vtc",
-    res_to_anat=1,     # 1=1mm, 2=2mm, 3=3mm isotropic in MNI
-    interpolation_method=2,
-    bounding_box_intensity_threshold=100,
-    data_type=2
-)
-```
+## Step 3: VTC Post-processing
+- Link: `vtc_link(vtc_file)` — view in BV
+- HPF: `vtc_filter_highpass_fft(highpass=0.008, highpass_unit="Hz")` — preferred for resting-state
+- Smooth: `vtc_smooth_spatial(gauss_fwhm=4.0, fwhm_unit="mm")` — preferred over FMR-level smoothing
 
-### VTC in Talairach space
-
-Requires both AC-PC transformation and Talairach landmarks:
-
-```python
-vtc_create_in_tal_space(
-    fmr_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF.fmr",
-    coreg_ia_trf_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_IA.trf",
-    coreg_fa_trf_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_FA.trf",
-    acpc_trf_file="/path/to/Subj01_UNI_IIHC_ISO_ACPC.trf",
-    tal_file="/path/to/Subj01_UNI_IIHC_ISO_TAL.tal",
-    vtc_file="/path/to/Subj01_Task_run01_M_SCSTBL_3DMCTS_THPGLMF_TAL.vtc",
-    res_to_anat=1,
-    interpolation_method=2,
-    bounding_box_intensity_threshold=100,
-    data_type=2
-)
-```
-
-### VTC parameter guide
-
-#### Resolution (`res_to_anat`)
-
-| Value | Native space | MNI/Tal space |
-|-------|-------------|---------------|
-| 1 | Same as VMR (e.g., 1 mm) | 1 mm isotropic |
-| 2 | Double VMR voxel (e.g., 2 mm) | 2 mm isotropic |
-| 3 | Triple VMR voxel (e.g., 3 mm) | 3 mm isotropic |
-
-For standard fMRI (2-3 mm native), use `res_to_anat=1`. For high-res (1 mm), consider `res_to_anat=2` to reduce file size and computation.
-
-#### Interpolation method
-
-| Method | Value | When to use |
-|--------|-------|-------------|
-| Trilinear | 1 | Fast, VTC creation preview |
-| Cubic spline | 2 | Standard — good balance of speed/quality |
-| Sinc | 3 | Best quality, final VTC for publication |
-
-#### Bounding box threshold
-
-The intensity threshold determines which voxels are considered "brain" for the VTC bounding box. For IIHC-corrected VMRs:
-- **100** is a good default (WM ~150, GM ~100, CSF ~60 in BV uint8)
-- Lower (50-80) includes more CSF and edge voxels
-- Higher (120-150) restricts to WM-heavy regions
-
-#### Data type
-
-| Type | Value | Range | File size (relative) |
-|------|-------|-------|---------------------|
-| uint8 | 1 | 0-225 | 1× |
-| uint16 | 2 | 0-65535 | 2× |
-| float32 | 3 | IEEE float | 4× |
-
-Use `uint16` (2) for standard fMRI. Use `float32` (3) if you need to preserve exact float values (e.g., z-scores, percent signal change).
-
-## Step 3: VTC post-processing
-
-### Link VTC to VMR
-
-After creation, link the VTC to view it in BV:
-
-```python
-vtc_link(vtc_file="/path/to/Subj01_Task_run01_MNI.vtc")
-```
-
-### Temporal high-pass filtering on VTC
-
-```python
-# FFT method (precise frequency control) — preferred for resting-state
-vtc_filter_highpass_fft(highpass=0.008, highpass_unit="Hz")
-
-# GLM Fourier (same as FMR level)
-vtc_filter_highpass_glm_fourier(n_cycles=3)
-
-# GLM DCT
-vtc_filter_highpass_glm_dct(n_basis_functions=2)
-```
-
-### Spatial smoothing on VTC
-
-```python
-vtc_smooth_spatial(gauss_fwhm=4.0, fwhm_unit="mm")
-```
-
-**Smoothing at VTC level is preferred** over FMR-level smoothing because it avoids interpolating already-smoothed data during the coregistration + VTC creation transform chain.
-
-## Step 4: Set up group analysis (MDM)
-
-For group-level GLM, create a Multi-Design Matrix (MDM) file referencing all VTCs:
-
-```python
-# MDM files are XML. BV can create them via the GUI, or you can build manually.
-# Once created, you can query which VTCs are referenced:
-
-vtc_list = get_vtcs_of_mdm(mdm_file="/path/to/group_design.mdm")
-```
-
-## Batch processing (all runs → VTCs)
-
-```python
-import os
-
-target_dir = "/path/to/preprocessed"
-vmr_path = os.path.join(target_dir, "Subj01_UNI_IIHC_ISO.vmr")
-mni_trf = os.path.join(target_dir, "Subj01_UNI_IIHC_ISO_MNI.trf")
-
-# Coregistration
-open_bv_document(vmr_path)
-
-fmr_files = [f for f in os.listdir(target_dir) if f.endswith("_THPGLMF.fmr")]
-
-for fmr in fmr_files:
-    fmr_full = os.path.join(target_dir, fmr)
-    
-    # BBR coregistration
-    vtc_coregister_fmr_to_vmr_bbr(fmr_file=fmr_full, timeout_seconds=300)
-    
-    # Derive IA/FA paths (BV uses the FMR basename with _IA.trf, _FA.trf)
-    ia_trf = fmr_full.replace('.fmr', '_IA.trf')
-    fa_trf = fmr_full.replace('.fmr', '_FA.trf')
-    
-    # Create VTC in MNI space
-    vtc_name = fmr.replace('.fmr', '_MNI.vtc')
-    vtc_create_in_mni_space(
-        fmr_file=fmr_full,
-        coreg_ia_trf_file=ia_trf,
-        coreg_fa_trf_file=fa_trf,
-        mni_trf_file=mni_trf,
-        vtc_file=os.path.join(target_dir, vtc_name),
-        res_to_anat=2,
-        interpolation_method=2,
-        bounding_box_intensity_threshold=100,
-        data_type=2
-    )
-    print(f"Created: {vtc_name}")
-    close_active_document()
-```
+## Step 4: Group Analysis Setup
+- MDM (Multi-Design Matrix): links multiple VTCs for group GLM
+- `get_vtcs_of_mdm(mdm_file)` — query which VTCs are referenced
 
 ## Gotchas
-
-- **BBR mesh reuse**: The first BBR run on a VMR creates a mesh (`.srf`). If the mesh already exists from a previous run, BV will reuse it. If you change the VMR (e.g., different IIHC), delete the old `.srf` files to force mesh regeneration.
-- **TRF file naming**: BV auto-names TRF files based on the FMR basename. For `Subj01_Task_run01_M.fmr`:
-  - `Subj01_Task_run01_M_IA.trf`
-  - `Subj01_Task_run01_M_FA.trf`
-  - `Subj01_Task_run01_M_IA-TO-FA.trf`
-- **VMR must stay open**: During VTC creation, the VMR used for coregistration must be the active document. Don't close it between coregistration and VTC creation.
-- **Bounding box check**: If VTC creation produces an unreasonably large or small VTC, adjust `bounding_box_intensity_threshold`. Too low = includes skull/background; too high = cuts off brain regions.
-- **MNI/Tal trf file path**: The `mni_trf_file` must be the `.trf` file produced by `normalize_bv_vmr_to_mni_space` (same basename as MNI VMR, `.trf` extension). Similarly for `acpc_trf_file`.
-- **VTC in native space first**: If you're unsure about coregistration quality, create a VTC in native space first and inspect the alignment in BV's 3D viewer before committing to MNI/Tal space.
-- **Transform chain**: Each step accumulates interpolation error. For best quality: coregister (trilinear OK) → VTC creation (sinc) → smoothing (Gaussian). Avoid: FMR smoothing → coregistration → VTC creation.
+- VMR must stay open during coregistration AND VTC creation
+- BBR mesh reuse: delete old .srf if VMR changed
+- TRF naming: `FMRname-TO-VMRname_IA.trf` (not just FMRname_IA.trf)
+- Bounding box: too low = includes skull, too high = cuts brain
+- Transform chain quality: coregister (trilinear OK) → VTC create (sinc) → smooth (Gaussian)
+- Create VTC in native space first to inspect alignment before MNI/Tal
