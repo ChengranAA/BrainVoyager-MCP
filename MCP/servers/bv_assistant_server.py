@@ -183,6 +183,21 @@ def bv_act(
                 Prefer actions from the widget's "actions" array in the
                 tree returned by `bv_query`.
 
+    ⚠️  IMPORTANT — Radio buttons and checkboxes:
+        Avoid `action="toggle"` on QRadioButton or QCheckBox widgets.
+        `toggle()` flips internal state WITHOUT emitting signals, so
+        connected slots (which update sibling widgets, validate input,
+        etc.) never fire and the UI appears frozen.
+
+        Instead, look at the PARENT WINDOW's "actions" array (the
+        top-level list returned by bv_query, not the widget's own
+        actions).  Use the named slot directly, e.g.:
+
+          target="@class:VolumeToolsDlg", action="onManualACPCMode"
+
+        This invokes the full signal-slot chain and the UI updates
+        correctly.
+
     Returns:
         True/False string indicating whether the action succeeded.
     """

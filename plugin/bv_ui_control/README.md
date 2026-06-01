@@ -84,7 +84,30 @@ bv.act("@text:Open")
 bv.act("@name:m_ZCoordMiniTools", "stepUp")
 ```
 
-### 3. Use with the MCP bridge
+### 3. Best Practices for Widget Interaction
+
+#### ⚠️ Prefer parent-window slots over raw widget toggles
+
+Qt widget methods like `toggle()` on `QRadioButton` or `QCheckBox` flip
+internal state **without emitting signals**.  The connected slot (which
+updates other widgets, validates input, etc.) never fires.
+
+| ❌ Wrong | ✅ Right |
+|---|---|
+| `bv.act("@name:ManualACPCOp", "toggle")` | `bv.act("@class:VolumeToolsDlg", "onManualACPCMode")` |
+| `bv.act("@name:AutomaticACPCOp", "toggle")` | `bv.act("@class:VolumeToolsDlg", "onAutoACPCMode")` |
+
+**Rule of thumb:**  Look at the `actions` array on the **parent window**
+in the `query()` output.  Every `QRadioButton` toggle is wired to a named
+slot (`on*Mode`, `on*Changed`, etc.) on the dialog — invoke that slot
+directly instead of touching the button.
+
+`click` (via the `click` WebSocket command) **does** work because it goes
+through `QAbstractButton::click()` → `setChecked()` → `toggled()` signal.
+But for state changes that aren't simple buttons (radio groups, checkboxes
+with validation), always prefer the slot.
+
+### 4. Use with the MCP bridge
 
 The library at `MCP/_shared/bv_ws.py` uses the same protocol.  Enable the
 `bv_assistant_server` in your MCP config to let AI agents query and interact

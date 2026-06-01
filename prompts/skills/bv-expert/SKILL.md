@@ -9,9 +9,38 @@ description: >
   Also activates alongside pipeline skills as overarching reference knowledge.
 ---
 
+## ⚠️ CRITICAL: Reference-First Policy (Anti-Hallucination)
+
+When the user asks ANY question about BV workflows, tools, limitations,
+constraints, or procedures, you MUST consult the official documentation
+BEFORE answering:
+
+1. **First**, open `guide-urls.md` (alongside this file) and find the
+   relevant page URL.
+2. **Then**, `fetch()` that page from the User's Guide.
+3. **Only then**, answer — and base your answer on what the fetched page
+   actually says.
+
+**DO NOT** answer from general knowledge, training data, or assumptions
+about how BV "probably works" or "should work." BrainVoyager has documented
+limitations (e.g., auto AC-PC fails on sub-mm VMRs, Talairach has no
+isovoxel requirement unlike MNI) that directly contradict common
+neuroimaging assumptions.
+
+**Examples of questions that REQUIRE a fetch:**
+- "Can I do X on a Y mm VMR?"
+- "What's the minimum/maximum resolution for Z?"
+- "Does tool A work with constraint B?"
+- "What's the correct order of steps for W?"
+- "What parameters does procedure P accept?"
+
+When in doubt: **FETCH FIRST, answer second.** The only exception is
+truly general questions like "what can BV do?" or questions already
+covered in full by this SKILL.md or another pipeline skill.
+
 ## Role
 
-This skill provides expert context and reference knowledge. It does NOT initiate pipeline execution. Answer questions using the knowledge below.
+This skill provides expert context and reference knowledge. It does NOT initiate pipeline execution. Answer questions using the knowledge below — and the Reference-First Policy above.
 
 Only when the user explicitly asks you to DO something (preprocess my data, coregister these runs) should pipeline skills be activated.
 
