@@ -11,29 +11,40 @@ Zed, Cursor, etc.) via the
 │  AI Agent (Claude)   │ ──────────────→  │  bv_core_server.py           │
 │                      │                  │  bv_anatomy_server.py        │
 │  MCP Client config:  │                  │  bv_fmri_server.py           │
-│    - BV Core         │                  │                              │
-│    - BV Anatomy      │                  │  Each is a FastMCP instance  │
-│    - BV fMRI         │                  │  calling _shared/bv_client   │
+│    - BV Core         │                  │  bv_assistant_server.py      │
+│    - BV Anatomy      │                  │                              │
+│    - BV fMRI         │                  │  Each is a FastMCP instance  │
+│    - BV Assistant    │                  │  calling _shared/bv_*        │
 └──────────────────────┘                  └──────────┬───────────────────┘
-                                                     │ TCP :5050
-                                                     ▼
+                                       TCP :5050 /  │  WebSocket :9000
+                                                    ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  BrainVoyager (Qt event loop)                                │
 │                                                              │
-│  bv_plugin/mcp_listener.py  ← non-blocking TCP + QTimer      │
-│       │                                                      │
-│       │  ALL_HANDLERS["action"](data)   ← O(1) hash table    │
-│       ▼                                                      │
-│  bv_plugin/listener_handlers/                                │
-│       ├── core_handlers.py    →  bv.open_document(), etc.    │
-│       ├── anatomy_handlers.py →  vmr.deface(), etc.          │
-│       └── fmri_handlers.py    →  bv.get_vtcs_of_mdm(), etc.  │
+│  ┌─ TCP path (document API) ─────────────────────────────┐   │
+│  │  plugin/bv_plugin/mcp_listener.py ← non-blocking     │   │
+│  │       │                                               │   │
+│  │       │  ALL_HANDLERS["action"](data) ← O(1) dispatch │   │
+│  │       ▼                                               │   │
+│  │  plugin/bv_plugin/listener_handlers/                  │   │
+│  │       ├── core_handlers.py    →  bv.open_document(), …│   │
+│  │       ├── anatomy_handlers.py →  vmr.deface(), …      │   │
+│  │       └── fmri_handlers.py    →  bv.get_vtcs_of_mdm() │   │
+│  └───────────────────────────────────────────────────────┘   │
 │                                                              │
-│  bv_auto_load/mcp_helper.py  →  MP2RAGE denoising, utilities │
+│  ┌─ WS path (widget introspection) ──────────────────────┐   │
+│  │  bv_inject.dylib  ← DYLD_INSERT_LIBRARIES             │   │
+│  │       │                                               │   │
+│  │       │  Qt accessibility tree + click / invoke       │   │
+│  │       ▼                                               │   │
+│  │  MCP/_shared/bv_ws.py    →  query(), act()            │   │
+│  └───────────────────────────────────────────────────────┘   │
+│                                                              │
+│  plugin/bv_auto_load/mcp_helper.py → MP2RAGE denoising, utilities │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Three small servers.** This follows the MCP ecosystem
+**Four small servers.** This follows the MCP ecosystem
 standard — the user enables only the servers they need per session, keeping the
 AI's context window lean.
 
@@ -42,35 +53,44 @@ AI's context window lean.
 | `bv_core_server` | 27 | Doc open/close/save/list, DICOM ops, log, shell, window |
 | `bv_anatomy_server` | 31 | VMR pipeline, MNI/Tal, mesh morphing (reconstruct, smooth, inflate, shrink-wrap), MP2RAGE |
 | `bv_fmri_server` | 22 | FMR preprocessing, VTC coregistration/creation (native/MNI/Tal), filtering, MDM |
+| `bv_assistant_server` | 4 | **Experimental.** Launch BV with injection, live widget tree inspection (`bv_query`), widget interaction (`bv_act`), window discovery (`bv_list_windows`)
 
 ## Directory Structure
 
 ```
-MCP/
+MCP/                            # MCP servers + shared code (run OUTSIDE BV)
 ├── _shared/
-│   └── bv_client.py            # call_bv() — shared by all 3 MCP servers
+│   ├── bv_client.py            # call_bv() — shared by TCP-based servers
+│   └── bv_ws.py                # query()/act() — WebSocket widget bridge
 │
-├── servers/                    # MCP server entry points (run OUTSIDE BV)
-│   ├── bv_core_server.py
-│   ├── bv_anatomy_server.py
-│   └── bv_fmri_server.py
+└── servers/
+    ├── bv_core_server.py
+    ├── bv_anatomy_server.py
+    ├── bv_fmri_server.py
+    └── bv_assistant_server.py  # EXPERIMENTAL — widget introspection
+
+plugin/                         # Everything that runs INSIDE BrainVoyager
+├── bv_ui_control/              # DYLD injection dylib (C++) + Python client
+│   ├── src/                    #   → C++ WebSocket server injected into BV
+│   ├── bv.py                   #   → Python client for the injection bridge
+│   └── CMakeLists.txt
 │
-├── bv_plugin/                  # → Run inside of BV's Python Development Panel
-│   ├── mcp_listener.py         # Run this from BV's Python Plugin editor
-│   └── listener_handlers/      # Hash-table dispatch (no if/elif chains)
+├── bv_plugin/                  # → Run inside BV's Python Development Panel
+│   ├── mcp_listener.py         #   Run this from BV's Python Plugin editor
+│   └── listener_handlers/      #   Hash-table dispatch (no if/elif chains)
 │       ├── core_handlers.py
 │       ├── anatomy_handlers.py
 │       └── fmri_handlers.py
 │
 └── bv_auto_load/               # → Copy into BV's Python Scripts directory
-    └── mcp_helper.py           # MP2RAGE denoising, VMR utilities
+    └── mcp_helper.py           #   MP2RAGE denoising, VMR utilities
 ```
 
 ## Quick Start
 
 ### 1. Inside BrainVoyager
 
-Copy the files inside of `bv_auto_load/` folders into BrainVoyager's `PythonScripts` folder. Then open BV's **Python Python Development** panel, open `mcp_listener.py`, and
+Copy the files inside of `plugin/bv_auto_load/` into BrainVoyager's `PythonScripts` folder. Then open BV's **Python Development** panel, open `plugin/bv_plugin/mcp_listener.py`, and
 run it. You should see:
 
 ```
@@ -121,10 +141,46 @@ Uses `uv run` to pick up the project's Python environment automatically:
 }
 ```
 
+### 3. (Optional) BV UI Assistant — WebSocket injection bridge
+
+The assistant server lets an AI agent **see and interact with BV's UI widgets**
+in real time (click buttons, query the widget tree, invoke Qt methods).
+It uses `bv_inject.dylib`, which must be loaded into BV at launch:
+
+```bash
+DYLD_INSERT_LIBRARIES=/path/to/bv_mcp/plugin/bv_ui_control/build/src/libbv_inject.dylib \
+    /Applications/BrainVoyager.app/Contents/MacOS/BrainVoyager
+```
+
+Add this server to your MCP config if you want UI automation:
+
+```json
+"BrainVoyager Assistant": {
+  "command": "uv",
+  "args": [
+    "run",
+    "--directory",
+    "/path/to/bv_mcp",
+    "python",
+    "MCP/servers/bv_assistant_server.py"
+  ]
+}
+```
+
+**Selectors.** Widgets are addressed with a `@type:value` syntax:
+
+| Selector | Matches | Example |
+|---|---|---|
+| `@text:Open` | Any widget whose visible text contains "Open" | Click the Open button |
+| `@name:spinBox` | Widget with Qt `objectName="spinBox"` | `bv_act("@name:spinBox", "stepUp")` |
+| `@class:QPushButton` | Any widget of that Qt class | Find all buttons |
+
+**Workflow:** `bv_query` → scan the widget tree → `bv_act` with selector.
+
 Replace `/path/to/bv_mcp` with the actual path to this project.  Enable only
 the servers you need — disable the rest to keep the AI's context small.
 
-### 3. Verify
+### 4. Verify
 
 Ask your AI agent: *"List the BrainVoyager methods available."*
 
@@ -132,7 +188,7 @@ Ask your AI agent: *"List the BrainVoyager methods available."*
 
 ## Adding a New BV API Command
 
-1. Add a handler in `bv_plugin/listener_handlers/<domain>_handlers.py`:
+1. Add a handler in `plugin/bv_plugin/listener_handlers/<domain>_handlers.py`:
    ```python
    def _vmr_new_command(data: dict) -> str:
        vmr = _bv.active_document

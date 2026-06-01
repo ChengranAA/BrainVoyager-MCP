@@ -1,0 +1,35 @@
+# ── Project-specific ─────────────────────────────────────────────────
+test_data/
+presentation/
+tmp/
+
+# ── Python ───────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# ── C++ / CMake build artifacts ──────────────────────────────────────
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+*.dylib
+*.so
+*.a
+
+# ── IDE / editor ─────────────────────────────────────────────────────
+.ropeproject/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── macOS ────────────────────────────────────────────────────────────
+.DS_Store
+
+# ── Environment / secrets ────────────────────────────────────────────
+.env
