@@ -22,7 +22,7 @@ Zed, Cursor, etc.) via the
 │  BrainVoyager (Qt event loop)                                │
 │                                                              │
 │  ┌─ TCP path (document API) ─────────────────────────────┐   │
-│  │  plugin/bv_plugin/mcp_listener.py ← non-blocking     │   │
+│  │  plugin/bv_plugin/mcp_listener.py ← non-blocking      │   │
 │  │       │                                               │   │
 │  │       │  ALL_HANDLERS["action"](data) ← O(1) dispatch │   │
 │  │       ▼                                               │   │
@@ -40,7 +40,8 @@ Zed, Cursor, etc.) via the
 │  │  MCP/_shared/bv_ws.py    →  query(), act()            │   │
 │  └───────────────────────────────────────────────────────┘   │
 │                                                              │
-│  plugin/bv_auto_load/mcp_helper.py → MP2RAGE denoising, utilities │
+│  plugin/bv_auto_load/mcp_helper.py                           │
+│           → MP2RAGE denoising, utilities                     │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,6 +55,43 @@ AI's context window lean.
 | `bv_anatomy_server` | 31 | VMR pipeline, MNI/Tal, mesh morphing (reconstruct, smooth, inflate, shrink-wrap), MP2RAGE |
 | `bv_fmri_server` | 22 | FMR preprocessing, VTC coregistration/creation (native/MNI/Tal), filtering, MDM |
 | `bv_assistant_server` | 4 | **Experimental.** Launch BV with injection, live widget tree inspection (`bv_query`), widget interaction (`bv_act`), window discovery (`bv_list_windows`)
+
+## Agent Skills
+
+[Zed agent skills](https://zed.dev/docs/assistant/skills) give the AI
+procedural knowledge about BrainVoyager workflows — from DICOM setup all
+the way to VTC creation. Skills live in `prompts/skills/` and are loaded
+on demand based on the user's request. Copy them into your Zed skills
+directory to use them.
+
+### Skill Catalog
+
+| Skill | Covers | When to use |
+|-------|--------|-------------|
+| **bv-expert** | Complete BV knowledge base, User's Guide chapter finder, coordinate systems, GLM/normalization/coregistration concepts | Any BV conceptual question — "what is BBR?", "how does MNI work?" |
+| **bv-dicom-setup** | DICOM rename, anonymize, series discovery, project dictionaries | "Organize my raw DICOM data" |
+| **bv-anatomical-pipeline** | VMR creation, MP2RAGE denoising, IIHC, isovoxel, MNI/Talairach normalization, defacing | "Process my anatomical scan" |
+| **bv-fmri-preprocessing** | FMR creation, slice timing, motion correction, HPF, spatial smoothing, EPI distortion correction (FSL topup) | "Preprocess my fMRI runs" |
+| **bv-coregistration-vtc** | BBR and intensity-based coregistration, VTC creation in native/MNI/Tal space, VTC post-processing | "Coregister and create VTCs" |
+| **bv-file-formats** | All BV binary formats (VMR, V16, FMR/STC, VTC, SRF, VMP, GLM, SMP, ...), axis conventions, bvbabel read/write patterns | "How do I read this VTC file?" |
+
+### How Skills Work
+
+Each skill's `SKILL.md` contains just a YAML frontmatter (`name` +
+`description`) and concise instructions. When the user asks about a topic,
+Zed matches the `description` against the request and loads the skill
+automatically. The `bv-expert` skill also includes `guide-urls.md` — a
+complete index of all ~190 User's Guide pages — so the agent can fetch
+official documentation on demand.
+
+### Setup
+
+```bash
+# Copy all skills into your Zed project skills directory
+cp -r prompts/skills/* /path/to/project/.agents/skills/
+```
+
+Skills are auto-discovered. No restart or config change needed.
 
 ## Directory Structure
 
